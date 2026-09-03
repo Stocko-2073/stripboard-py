@@ -9,6 +9,41 @@ pip install -e ".[dev]"
 Python 3.12 or newer. There are no runtime dependencies and there should not be any —
 if you find yourself wanting one, please open an issue first.
 
+## Project layout
+
+```
+src/stripboard/
+  __init__.py       public API re-exports
+  board.py          StripBoard -- the facade the mixins below compose into
+  project.py        project(), the one-call driver a board file uses
+  component.py      the handle a part builder returns
+  _state.py         the state and methods the mixins share (type-checking only)
+
+  canvas.py         drawing primitives, colours, the transform stack
+  text.py           the four text orientations
+  footprints/       part builders, grouped by kind
+  wiring.py         jumpers, cuts, drills, keep-outs
+  connectivity.py   trace(): flood-fill a net to check it
+  netlist.py        net() and connect()
+  autoroute.py      driving the router and drawing its result
+  export/           PDF, g-code, SVG, carrier STL
+
+  font.py           the vector stroke font
+  palette.py        colour tables
+  views.py          the FRONT/BACK/DESIGN/LABEL presets
+  geometry.py       row-letter coercion
+  transform.py      affine matrix maths
+  pdf/              the built-in PDF writer
+  router/           the bundled autorouter
+  cli.py            the `stripboard` console script
+```
+
+`StripBoard` is a facade composed from mixins rather than a set of collaborating objects.
+That is deliberate: these methods share a great deal of genuinely mutable render state --
+the PDF document, the transform stack, the `show_*` toggles, the connection list, the
+solve cache -- and `_state.py` writes that shared surface down. Shrinking it is the path
+to a cleaner decomposition, if one is wanted.
+
 ## Tests
 
 ```sh

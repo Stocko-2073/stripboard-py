@@ -16,6 +16,7 @@ from __future__ import annotations
 import sys
 import warnings
 from pathlib import Path
+from types import FrameType
 
 __all__ = [
     "StripboardWarning",
@@ -62,7 +63,7 @@ def _caller_stacklevel() -> int:
     """Frames from :func:`warn` out to the first one outside this package."""
     package_dir = str(Path(__file__).parent)
     # _getframe(1) is warn() itself, which is stacklevel 1; count outwards from there.
-    frame: object | None = sys._getframe(1)
+    frame: FrameType | None = sys._getframe(1)
     level = 1
     while frame is not None:
         filename = frame.f_globals.get("__file__", "")

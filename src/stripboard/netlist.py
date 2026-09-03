@@ -7,12 +7,21 @@ calls that share a pin become a single net rather than several overlapping ones.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from .component import Component
+
+if TYPE_CHECKING:
+    # Resolves the state and sibling methods every mixin shares; see _state.py. At
+    # runtime the base is `object`, so the MRO is unchanged.
+    from ._state import BoardState as _Base
+else:
+    _Base = object
 
 __all__ = ["NetlistMixin"]
 
 
-class NetlistMixin:
+class NetlistMixin(_Base):
     def _register(self, base, pinmap, origin, locked, keepouts=(), internal=(), redraw=None):
         """Record a built Component (auto-numbering its id) and return the handle."""
         n = self._ref_counters.get(base, 0) + 1
@@ -48,7 +57,7 @@ class NetlistMixin:
         """Explicit net() groups, plus connect() edges closed into nets via union-find."""
         nets = [(nid, set(refs), w) for (nid, refs, w) in self._route_nets]
         if self._route_edges:
-            parent = {}
+            parent: dict[Any, Any] = {}
 
             def find(p):
                 parent.setdefault(p, p)
@@ -57,7 +66,8 @@ class NetlistMixin:
                     p = parent[p]
                 return p
 
-            groups, colors = {}, {}
+            groups: dict[Any, set[Any]] = {}
+            colors: dict[Any, Any] = {}
             for a, b, _w, _color in self._route_edges:
                 parent[find(a)] = find(b)
             for a, b, _w, color in self._route_edges:

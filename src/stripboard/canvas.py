@@ -9,14 +9,22 @@ parallel capture CTM in lockstep -- see :mod:`stripboard.transform`.
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 from . import transform
 from .geometry import KAPPA
 
+if TYPE_CHECKING:
+    # Resolves the state and sibling methods every mixin shares; see _state.py. At
+    # runtime the base is `object`, so the MRO is unchanged.
+    from ._state import BoardState as _Base
+else:
+    _Base = object
+
 __all__ = ["CanvasMixin"]
 
 
-class CanvasMixin:
+class CanvasMixin(_Base):
     def _out(self, s):
         self.pdf.out(s)
 

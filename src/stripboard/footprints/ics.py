@@ -9,11 +9,19 @@ be redrawn once the solver picks its position.
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Resolves the state and sibling methods every mixin shares; see _state.py. At
+    # runtime the base is `object`, so the MRO is unchanged.
+    from .._state import BoardState as _Base
+else:
+    _Base = object
 
 __all__ = ["IcsMixin"]
 
 
-class IcsMixin:
+class IcsMixin(_Base):
     def _draw_sip(self, x, y, l, name, upside_down=False, pins=None, flip=False,
                   mod=1, width=1, label_scale=1.0, emit=True):
         y = self.row(y)

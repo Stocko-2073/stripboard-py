@@ -6,6 +6,12 @@ All notable changes to this project are documented here. This project adheres to
 ## [Unreleased]
 
 ### Added
+- `StripBoard` is now a facade composed from mixins, one module per concern (`canvas`,
+  `text`, `footprints/*`, `wiring`, `connectivity`, `netlist`, `autoroute`, `export`),
+  replacing a single 2200-line module holding a 112-method class. Every method kept its
+  name and signature. `_state.py` declares the state and cross-mixin methods they share
+  -- 38 attributes and 65 methods -- so a type checker can follow the composition and the
+  coupling is written down rather than implicit.
 - The data tables (the vector stroke font, the colour palettes, the view presets) moved
   into `font.py`, `palette.py` and `views.py` and are now built once at import instead of
   being rebuilt on every `StripBoard`. Affine transform maths moved to `transform.py`,
@@ -13,6 +19,13 @@ All notable changes to this project are documented here. This project adheres to
   it.
 - Continuous integration: the full suite on Python 3.12-3.14 plus macOS, `ruff`, `mypy`,
   a wheel build, and a gate asserting the package still has no runtime dependencies.
+- A test suite of 535 tests. The default selection runs in about 2.5 seconds; the four
+  solver-heavy router tests are marked `slow` and the OpenSCAD one `integration`.
+- `tools/capture_traces.py`, the regression harness: it renders a directory of board
+  scripts and reduces each artifact to a normalized trace (a PDF's page content streams
+  with structure and metadata stripped; g-code and SVG verbatim). Point it at your own
+  designs for a much stronger safety net than the examples alone provide -- `.regression/`
+  is gitignored, so private boards never enter the repository.
 - First packaged release of a library that previously lived as a single
   `stripboard.py` script: `pip install stripboard`, a `stripboard` console script, and a
   real test suite.

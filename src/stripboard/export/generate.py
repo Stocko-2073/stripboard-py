@@ -11,11 +11,19 @@ import shutil
 import subprocess
 from importlib.resources import files
 from pathlib import Path
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Resolves the state and sibling methods every mixin shares; see _state.py. At
+    # runtime the base is `object`, so the MRO is unchanged.
+    from .._state import BoardState as _Base
+else:
+    _Base = object
 
 __all__ = ["ExportMixin"]
 
 
-class ExportMixin:
+class ExportMixin(_Base):
     def gen(self, pdf_name):
         """Write the board PDF to `pdf_name`, creating parent directories as needed."""
         return self.pdf.output(pdf_name)

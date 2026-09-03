@@ -8,14 +8,22 @@ draws through once it has solved.
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 from .drc import JumperConflictWarning
 from .drc import warn as _warn
 
+if TYPE_CHECKING:
+    # Resolves the state and sibling methods every mixin shares; see _state.py. At
+    # runtime the base is `object`, so the MRO is unchanged.
+    from ._state import BoardState as _Base
+else:
+    _Base = object
+
 __all__ = ["WiringMixin"]
 
 
-class WiringMixin:
+class WiringMixin(_Base):
     def jdot(self, x, y, f='F'):
         y = self.row(y)
         if self.show_jumpers:
@@ -138,20 +146,20 @@ class WiringMixin:
 
             dist = int(((x2 - x)**2 + (y2 - y)**2)**0.5)
             if dist > 1 and self.show_numbers and show_length:
-                dist = str(dist)
+                label = str(dist)
                 self.pdf.set_fill_color(255)
                 self._rect(
                     (x-0.5) + (x2 - x) / 2,
                     (y-0.5) + (y2 - y) / 2,
                     1,
-                    len(dist),
+                    len(label),
                     "F"
                 )
                 if self.black_and_white:
                     self.black()
                 else:
                     self.pdf.set_draw_color(*color)
-                self.vtext(x + (x2 - x) / 2, y + (y2 - y) / 2, dist)
+                self.vtext(x + (x2 - x) / 2, y + (y2 - y) / 2, label)
             if self.black_and_white:
                 self.line_width(.2)
 

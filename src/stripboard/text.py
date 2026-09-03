@@ -8,13 +8,22 @@ polylines rather than a real font, the same geometry can be re-emitted as laser 
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from .drc import MissingGlyphWarning
 from .drc import warn as _warn
+
+if TYPE_CHECKING:
+    # Resolves the state and sibling methods every mixin shares; see _state.py. At
+    # runtime the base is `object`, so the MRO is unchanged.
+    from ._state import BoardState as _Base
+else:
+    _Base = object
 
 __all__ = ["TextMixin"]
 
 
-class TextMixin:
+class TextMixin(_Base):
     def vtext(self, x, y, text, y_scale=1.0):
         if not self.show_components:
             return

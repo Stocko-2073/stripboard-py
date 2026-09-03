@@ -2,10 +2,19 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    # Resolves the state and sibling methods every mixin shares; see _state.py. At
+    # runtime the base is `object`, so the MRO is unchanged.
+    from .._state import BoardState as _Base
+else:
+    _Base = object
+
 __all__ = ["ModulesMixin"]
 
 
-class ModulesMixin:
+class ModulesMixin(_Base):
     def esp32minikit(self, x, y):
         """Draw an ESP32 MiniKit footprint with its top-left pin at (x, y).
 

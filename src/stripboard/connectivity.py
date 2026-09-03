@@ -8,13 +8,22 @@ mistake shows up as a net that is the wrong shape.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from .drc import ShortCircuitWarning, TraceCollisionWarning
 from .drc import warn as _warn
+
+if TYPE_CHECKING:
+    # Resolves the state and sibling methods every mixin shares; see _state.py. At
+    # runtime the base is `object`, so the MRO is unchanged.
+    from ._state import BoardState as _Base
+else:
+    _Base = object
 
 __all__ = ["ConnectivityMixin"]
 
 
-class ConnectivityMixin:
+class ConnectivityMixin(_Base):
     def trace_jumper(self, x, y, x2, y2, color):
         if not self.show_jumpers:
             return
@@ -28,17 +37,17 @@ class ConnectivityMixin:
 
         dist = int(((x2 - x)**2 + (y2 - y)**2)**0.5)
         if dist > 1 and self.show_numbers:
-            dist = str(dist)
+            label = str(dist)
             self.pdf.set_fill_color(255)
             self._rect(
                 (x + (x2 - x) / 2)-0.5,
                 (y + (y2 - y) / 2)-0.5,
                 1,
-                len(dist),
+                len(label),
                 "F"
             )
             self.pdf.set_draw_color(*color)
-            self.vtext(x + (x2 - x) / 2, y + (y2 - y) / 2, dist)
+            self.vtext(x + (x2 - x) / 2, y + (y2 - y) / 2, label)
 
         self.pdf.set_draw_color(*color)
         self.pdf.set_fill_color(0)
@@ -47,7 +56,7 @@ class ConnectivityMixin:
         if not self.show_traces:
             return
         y = self.row(y)
-        marked = []
+        marked: list[tuple[float, float]] = []
         if color is None:
             color = self.colors[self.trace_color]
         self.trace_point(x, y, marked, color, first=True)
