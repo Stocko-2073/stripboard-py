@@ -13,13 +13,16 @@ silent by default, which is the wrong default for a design-rule check.
 
 from __future__ import annotations
 
+import sys
 import warnings
+from pathlib import Path
 
 __all__ = [
     "StripboardWarning",
     "JumperConflictWarning",
     "ShortCircuitWarning",
     "TraceCollisionWarning",
+    "MissingGlyphWarning",
     "warn",
 ]
 
@@ -40,10 +43,31 @@ class TraceCollisionWarning(StripboardWarning):
     """Two traced nets met, so they are electrically the same net on the board."""
 
 
+class MissingGlyphWarning(StripboardWarning):
+    """A character has no glyph in the built-in stroke font, so it was not drawn."""
+
+
 def warn(message: str, category: type[StripboardWarning]) -> None:
     """Raise a design-rule warning, attributed to the board file that caused it.
 
-    ``stacklevel=3`` steps out of this function and out of the library method that
-    detected the problem, so the reported location is the caller's ``draw()``.
+    The stack level is found rather than hardcoded, because the distance from here to the
+    caller differs per call site -- ``jumper()`` detects a conflict one frame deeper than
+    ``draw_letter()`` does, and ``text()`` calls the latter from deeper still. Walking out
+    to the first frame outside this package reports the board file in every case.
     """
-    warnings.warn(message, category, stacklevel=3)
+    warnings.warn(message, category, stacklevel=_caller_stacklevel())
+
+
+def _caller_stacklevel() -> int:
+    """Frames from :func:`warn` out to the first one outside this package."""
+    package_dir = str(Path(__file__).parent)
+    # _getframe(1) is warn() itself, which is stacklevel 1; count outwards from there.
+    frame: object | None = sys._getframe(1)
+    level = 1
+    while frame is not None:
+        filename = frame.f_globals.get("__file__", "")
+        if not filename.startswith(package_dir):
+            return level
+        frame = frame.f_back
+        level += 1
+    return level

@@ -6,6 +6,13 @@ All notable changes to this project are documented here. This project adheres to
 ## [Unreleased]
 
 ### Added
+- The data tables (the vector stroke font, the colour palettes, the view presets) moved
+  into `font.py`, `palette.py` and `views.py` and are now built once at import instead of
+  being rebuilt on every `StripBoard`. Affine transform maths moved to `transform.py`,
+  shared by the PDF emitter and the g-code stroke capture that has to stay in step with
+  it.
+- Continuous integration: the full suite on Python 3.12-3.14 plus macOS, `ruff`, `mypy`,
+  a wheel build, and a gate asserting the package still has no runtime dependencies.
 - First packaged release of a library that previously lived as a single
   `stripboard.py` script: `pip install stripboard`, a `stripboard` console script, and a
   real test suite.
@@ -45,6 +52,12 @@ All notable changes to this project are documented here. This project adheres to
   wire soldered at each crossing, which is how a bus is actually built; the previous
   ladder of separate jumpers put two wire ends in holes that only take one.
 - Mutable default arguments (`skip_pins=[]`) on `dip`, `xiao` and the DIP renderer.
+- `draw_letter()` raised a bare `KeyError` for any character absent from the built-in
+  stroke font, so one stray character in a label aborted the whole render. It now warns
+  (`MissingGlyphWarning`) and skips that character.
+- Warning locations point at the board file that caused them, at whatever call depth --
+  the stack level is discovered rather than hardcoded, since `jumper()` and `text()` sit
+  different distances from the check that fires.
 
 ### Known issues
 - `trace_point()` is a recursive flood fill that rescans its connection list per cell, so

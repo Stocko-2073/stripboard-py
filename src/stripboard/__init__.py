@@ -26,8 +26,14 @@ import subprocess
 from importlib.resources import files
 from pathlib import Path
 
+from .font import VECTOR_CHARS
+from .palette import COLORS, WIRE_COLORS
+from .views import VIEW_PRESETS
+from . import transform
+
 from .drc import (
     JumperConflictWarning,
+    MissingGlyphWarning,
     ShortCircuitWarning,
     StripboardWarning,
     TraceCollisionWarning,
@@ -48,6 +54,7 @@ __all__ = [
     "JumperConflictWarning",
     "ShortCircuitWarning",
     "TraceCollisionWarning",
+    "MissingGlyphWarning",
     "__version__",
 ]
 
@@ -92,6 +99,19 @@ class Component:
 
 
 class StripBoard:
+    """A board being drawn: geometry, components, wiring, and the PDF it renders to.
+
+    One instance is a whole *sheet*, not a single board -- ``begin_board``/``end_board``
+    bracket each board on it, and ``triptych`` puts three views of the same board side by
+    side. See :func:`project` for the usual entry point.
+    """
+
+    # Shared data tables (see font.py, palette.py, views.py). Class-level so they are
+    # built once at import rather than rebuilt per instance.
+    vector_chars = VECTOR_CHARS
+    colors = COLORS
+    wire_colors = WIRE_COLORS
+    _VIEW_PRESETS = VIEW_PRESETS
 
     def __init__(
         self,
@@ -116,132 +136,7 @@ class StripBoard:
         # and captured coordinates stay in board-grid (hole) units.
         self._cap_on = False
         self._cap_paths = []                                # list[list[(x, y)]], grid units
-        self._cap_ctm = [(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)]    # stack of affine (a,b,c,d,e,f)
-
-        self.vector_chars = {
-            ' ': [],
-            '!': [[2, 0, 2, 2], [2, 3.8, 2, 4]],
-            '\"': [[1, 0, 1, 1], [3, 0, 3, 1]],
-            '#': [[1, 0, 1, 4], [3, 0, 3, 4], [0, 1, 4, 1], [0, 3, 4, 3]],
-            '$': [[4, 0.5, 1, 0.5, 0, 2, 4, 2, 3, 3.5, 0, 3.5], [2, 0, 2, 4]],
-            '%': [[1, 0, 0, 1, 1, 2, 2, 1, 1, 0], [3, 2, 2, 3, 3, 4, 4, 3, 3, 2], [4, 0, 0, 4]],
-            '&': [[4, 4, 1, 2, 0.5, 0.5, 2, 0, 3, 1, 0, 3, 1, 4, 2, 4, 4, 3]],
-            '\'': [[2, 0, 2, 1]],
-            '(': [[2, 0, 1, 1, 1, 3, 2, 4]],
-            ')': [[2, 0, 3, 1, 3, 3, 2, 4]],
-            '*': [[0.5, 0.5, 3.5, 3.5], [0.5, 3.5, 3.5, 0.5], [2, 0, 2, 4], [0, 2, 4, 2]],
-            '+': [[2, 0.5, 2, 3.5], [0.5, 2, 3.5, 2]],
-            ',': [[2, 3, 1, 4]],
-            '-': [[0.5, 2, 3.5, 2]],
-            '.': [[2, 3, 2, 3.3, 2.3, 3.3,  2.3, 3, 2, 3]],
-            '/': [[3, 0, 1, 4]],
-            '0': [[0, 1, 1, 0, 3, 0, 4, 1, 4, 3, 3, 4, 1, 4, 0, 3, 0, 1], [2, 2, 2, 2.2]],
-            '1': [[0, 1, 2, 0, 2, 4], [0, 4, 4, 4]],
-            '2': [[0, 1, 1, 0, 3, 0, 4, 1, 0, 4, 4, 4]],
-            '3': [[0, 1, 1, 0, 3, 0, 4, 1, 2, 2, 4, 3, 3, 4, 1, 4, 0, 3]],
-            '4': [[1, 0, 0, 2, 4, 2], [3, 0, 3, 4]],
-            '5': [[4, 0, 0, 0, 0, 1.7, 3.5, 1.7, 4, 3, 3.5, 4, 0.5, 4, 0, 3.5]],
-            '6': [[3.5, 0, 1, 0, 0, 1, 0, 3, 1, 4, 3, 4, 4, 3, 3, 2, 1, 2, 0, 3]],
-            '7': [[0, 0, 4, 0, 4, 1, 1, 4]],
-            '8': [[1, 0, 3, 0, 4, 1, 3, 2, 4, 3, 3, 4, 1, 4, 0, 3, 1, 2, 0, 1, 1, 0], [1, 2, 3, 2]],
-            '9': [[4, 4, 4, 2, 4, 1, 3, 0, 1, 0, 0, 1, 1, 2, 4, 2]],
-            ':': [[2, 1, 2, 1.2], [2, 3, 2, 3.2]],
-            ';': [[2, 1, 2, 1.2], [2, 3, 1, 4]],
-            '<': [[3, 1, 1, 2, 3, 3]],
-            '=': [[1, 1, 3, 1], [1, 3, 3, 3]],
-            '>': [[1, 1, 3, 2, 1, 3]],
-            '?': [[0, 1, 1, 0, 3, 0, 4, 1, 2, 2], [2, 3.8, 2, 4]],
-            '@': [[3, 3, 3, 2, 2, 1, 1, 2, 2, 3, 3, 3, 4, 2, 4, 1, 3, 0, 1, 0, 0, 1, 0, 3, 1, 4, 4, 4]],
-            'A': [[0, 4, 0, 2, 2, 0, 4, 2, 4, 4], [0, 3, 4, 3]],
-            'B': [[0, 0, 0, 4, 3, 4, 4, 3, 3, 2, 4, 1, 3, 0, 0, 0], [0, 2, 3, 2]],
-            'C': [[4, 1, 3, 0, 1, 0, 0, 1, 0, 3, 1, 4, 3, 4, 4, 3]],
-            'D': [[0, 0, 0, 4, 3, 4, 4, 3, 4, 1, 3, 0, 0, 0]],
-            'E': [[4, 0, 0, 0, 0, 4, 4, 4], [0, 2, 3, 2]],
-            'F': [[4, 0, 0, 0, 0, 4], [0, 2, 3, 2]],
-            'G': [[4, 0, 1, 0, 0, 1, 0, 3, 1, 4, 3, 4, 4, 3], [4, 4, 4, 2, 2, 2]],
-            'H': [[0, 0, 0, 4], [4, 0, 4, 4], [0, 2, 4, 2]],
-            'I': [[0, 0, 4, 0], [0, 4, 4, 4], [2, 0, 2, 4]],
-            'J': [[4, 0, 4, 3, 3, 4, 1, 4, 0, 3]],
-            'K': [[0, 0, 0, 4], [4, 0, 0, 2, 4, 4]],
-            'L': [[0, 0, 0, 4, 4, 4]],
-            'M': [[0, 4, 0, 0, 2, 2, 4, 0, 4, 4]],
-            'N': [[0, 4, 0, 0, 4, 4, 4, 0]],
-            'O': [[1, 0, 3, 0, 4, 1, 4, 3, 3, 4, 1, 4, 0, 3, 0, 1, 1, 0]],
-            'P': [[0, 4, 0, 0, 3, 0, 4, 1, 3, 2, 0, 2]],
-            'Q': [[1, 0, 3, 0, 4, 1, 4, 2.5, 2.5, 4, 1, 4, 0, 3, 0, 1, 1, 0], [4, 4, 2, 2]],
-            'R': [[0, 4, 0, 0, 3, 0, 4, 1, 3, 2, 0, 2], [2, 2, 4, 4]],
-            'S': [[4, 0.5, 3, 0, 1, 0, 0, 1, 1, 2, 3, 2, 4, 3, 3, 4, 1, 4, 0, 3.5]],
-            'T': [[0, 0, 4, 0], [2, 0, 2, 4]],
-            'U': [[0, 0, 0, 3, 1, 4, 3, 4, 4, 3, 4, 0]],
-            'V': [[0, 0, 2, 4, 4, 0]],
-            'W': [[0, 0, 0, 4, 2, 2, 4, 4, 4, 0]],
-            'X': [[0, 0, 4, 4], [0, 4, 4, 0]],
-            'Y': [[0, 0, 2, 2, 4, 0], [2, 2, 2, 4]],
-            'Z': [[0, 0, 4, 0, 0, 4, 4, 4]],
-            '[': [[3, 0, 1, 0, 1, 4, 3, 4]],
-            '\\': [[1, 0, 3, 4]],
-            ']': [[1, 0, 3, 0, 3, 4, 1, 4]],
-            '^': [[0, 2, 2, 0, 4, 2]],
-            '_': [[0, 4, 4, 4]],
-            '`': [[1, 0, 2, 1]],
-            'a': [[4, 2, 4, 4], [0, 3, 1, 2, 3, 2, 4, 3, 3, 4, 1, 4, 0, 3]],
-            'b': [[0, 0, 0, 4], [0, 3, 1, 2, 3, 2, 4, 3, 3, 4, 1, 4, 0, 3]],
-            'c': [[4, 2, 1, 2, 0, 3, 1, 4, 4, 4]],
-            'd': [[4, 0, 4, 4], [0, 3, 1, 2, 3, 2, 4, 3, 3, 4, 1, 4, 0, 3]],
-            'e': [[0, 3, 4, 3, 3, 2, 1, 2, 0, 3, 1, 4, 3, 4]],
-            'f': [[4, 1, 3, 0, 2, 1, 2, 4], [1, 2, 3, 2]],
-            'g': [[4, 2, 4, 4, 3, 5, 1, 5, 0, 4], [0, 3, 1, 2, 3, 2, 4, 3, 3, 4, 1, 4, 0, 3]],
-            'h': [[0, 0, 0, 4], [0, 3, 1, 2, 3, 2, 4, 3, 4, 4]],
-            'i': [[1, 2, 2, 2, 2, 4], [2, 0, 2, 1]],
-            'j': [[3, 2, 3, 4, 2, 5, 1, 5, 0, 4], [3, 0, 3, 1]],
-            'k': [[0, 0, 0, 4], [4, 2, 0, 3, 4, 4]],
-            'l': [[1, 0, 2, 0, 2, 4], [1, 4, 3, 4]],
-            'm': [[0, 2, 0, 4], [0, 3, 1, 2, 2, 3, 3, 2, 4, 3, 4, 4], [2, 3, 2, 4]],
-            'n': [[0, 2, 0, 4], [0, 3, 1, 2, 3, 2, 4, 3, 4, 4]],
-            'o': [[0, 3, 1, 2, 3, 2, 4, 3, 3, 4, 1, 4, 0, 3]],
-            'p': [[0, 2, 0, 5], [0, 3, 1, 2, 3, 2, 4, 3, 3, 4, 1, 4, 0, 3]],
-            'q': [[4, 2, 4, 5], [0, 3, 1, 2, 3, 2, 4, 3, 3, 4, 1, 4, 0, 3]],
-            'r': [[0, 2, 0, 4], [0, 3, 1, 2, 3, 2, 4, 3]],
-            's': [[4, 2, 1, 2, 0, 3, 4, 3, 3, 4, 0, 4]],
-            't': [[2, 1, 2, 4, 3, 4, 4, 3], [0, 2, 4, 2]],
-            'u': [[0, 2, 0, 3, 1, 4, 3, 4, 4, 3], [4, 2, 4, 4]],
-            'v': [[0, 2, 2, 4, 4, 2]],
-            'w': [[0, 2, 0, 3, 1, 4, 2, 3, 3, 4, 4, 3, 4, 2], [2, 2, 2, 3]],
-            'x': [[0, 2, 4, 4], [4, 2, 0, 4]],
-            'y': [[4, 2, 1, 5], [0, 2, 2, 4]],
-            'z': [[0, 2, 4, 2, 0, 4, 4, 4]],
-            '{': [[3, 0, 2, 0, 1, 1, 2, 2, 1, 3, 2, 4, 3, 4], [0, 2, 2, 2]],
-            '|': [[2, 0, 2, 5]],
-            '}': [[1, 0, 2, 0, 3, 1, 2, 2, 3, 3, 2, 4, 1, 4], [4, 2, 2, 2]],
-            '~': [[0, 1, 1, 0, 2, 1, 3, 1, 4, 0]],
-            'µ': [[0.5, 5.5, 0.5, 1, 0.5, 3, 1, 4, 3, 4, 3.5, 3], [3.5, 1, 3.5, 4]]
-        }
-
-        self.colors = [
-            (255, 0, 0),
-            (0, 0, 255),
-            (0, 255, 0),
-            (0, 255, 255),
-            (220, 220, 0),
-            (255, 0, 255),
-            (64, 0, 255),
-            (128, 255, 0),
-            (128, 128, 128),
-            (255, 0, 128),
-            (128, 0, 255),
-            (0, 96, 0),
-            (0, 0, 96)
-        ]
-
-        # Jumper wire colors, keyed by full name and single-char shorthand.
-        self.wire_colors = {
-            'blue':   (16, 128, 255), 'b': (16, 128, 255),
-            'white':  (192, 192, 192), 'w': (192, 192, 192),
-            'red':    (255, 0, 0),     'r': (255, 0, 0),
-            'green':  (16, 180, 16),   'g': (16, 180, 16),
-            'black':  (0, 0, 0),       'k': (0, 0, 0),
-            'yellow': (200, 160, 0),   'y': (200, 170, 0),
-        }
+        self._cap_ctm = [transform.IDENTITY]                 # stack of affine (a,b,c,d,e,f)
 
         self.black_and_white = black_and_white
         self.page_width = page_width / scale
@@ -361,7 +256,7 @@ class StripBoard:
         # Zero the capture frame here so the base page transforms in __init__ drop out and
         # captured geometry is in board-grid (hole) units; begin_board's own translates
         # below only re-center the board, which gen_gcode() removes by bbox-normalising.
-        self._cap_ctm = [(1.0, 0.0, 0.0, 1.0, 0.0, 0.0)]
+        self._cap_ctm = [transform.IDENTITY]
         self._push()
         self._translate(self.page_width/2 + at[0], self.page_height/2 + at[1])
         self._push()
@@ -434,28 +329,15 @@ class StripBoard:
     # recorded in the current frame. Matrices are (a,b,c,d,e,f), same order as PDF `cm`;
     # a point maps as x' = a*x + c*y + e, y' = b*x + d*y + f.
 
-    @staticmethod
-    def _cap_mul(m_op, top):
-        """Compose so a point is transformed by m_op *first*, then top (PDF cm semantics)."""
-        a1, b1, c1, d1, e1, f1 = m_op
-        a2, b2, c2, d2, e2, f2 = top
-        return (
-            a1 * a2 + b1 * c2,
-            a1 * b2 + b1 * d2,
-            c1 * a2 + d1 * c2,
-            c1 * b2 + d1 * d2,
-            e1 * a2 + f1 * c2 + e2,
-            e1 * b2 + f1 * d2 + f2,
-        )
+    _cap_mul = staticmethod(transform.compose)
 
     def _cap_op(self, m_op):
         """Apply transform matrix m_op to the top of the capture CTM stack."""
         if self._cap_ctm:
-            self._cap_ctm[-1] = self._cap_mul(m_op, self._cap_ctm[-1])
+            self._cap_ctm[-1] = transform.compose(m_op, self._cap_ctm[-1])
 
     def _cap_pt(self, x, y):
-        a, b, c, d, e, f = self._cap_ctm[-1]
-        return (a * x + c * y + e, b * x + d * y + f)
+        return transform.apply(self._cap_ctm[-1], x, y)
 
     def _cap_add(self, pts):
         """Record a stroked polyline (local-coord (x,y) pairs) into _cap_paths."""
@@ -1700,7 +1582,12 @@ class StripBoard:
         yy = y - 0.31
 
         self.line_width(0.15)
-        v = self.vector_chars[c]
+        v = self.vector_chars.get(c)
+        if v is None:
+            # A stray character in a label should not abort the whole render.
+            _warn(f"No glyph for {c!r} in the built-in stroke font; skipping it.",
+                  MissingGlyphWarning)
+            return
         self._push()
         self._translate(x,y)
         self._scale(x_scale,y_scale)
@@ -1906,15 +1793,6 @@ class StripBoard:
     # Canonical build/preview views. Each is a fixed set of begin_board(...) toggles; only
     # the position (`at`) and board size change per call. These are the exact arg-sets that
     # recurred verbatim across every hand-built project's drawBuild()/label block.
-    _VIEW_PRESETS = {
-        'FRONT':  dict(show_strips=False, show_traces=False, show_crosses=False),
-        'BACK':   dict(flip_x=True, show_strips=True, show_traces=False, show_crosses=True,
-                       show_components=False, show_jumpers=False),
-        'DESIGN': dict(show_strips=True, show_traces=True),
-        'LABEL':  dict(show_strips=False, show_traces=False, show_crosses=False,
-                       show_coordinates=False),
-    }
-
     def begin_view(self, view, board_width, board_height, *, at=(0, 0), title=None,
                   rotate=False, **overrides):
         """begin_board() with one of the canonical view presets (FRONT/BACK/DESIGN/LABEL).
@@ -2128,27 +2006,27 @@ class StripBoard:
 
     def _translate(self, x, y):
         self._out('1 0 0 1 %.2F %.2F cm' % (x,y))
-        self._cap_op((1.0, 0.0, 0.0, 1.0, x, y))
+        self._cap_op(transform.translation(x, y))
 
     def _rotate(self, angle):
         angle = angle * 3.1415/180
         c = math.cos(angle)
         s = math.sin(angle)
         self._out('%.5F %.5F %.5F %.5F 0 0 cm' % (c,s,-s,c))
-        self._cap_op((c, s, -s, c, 0.0, 0.0))
+        self._cap_op(transform.rotation(c, s))
 
     def _flip_y(self):
         self._out('1 0 0 -1 0 0 cm')
-        self._cap_op((1.0, 0.0, 0.0, -1.0, 0.0, 0.0))
+        self._cap_op(transform.FLIP_Y)
 
     def _flip_x(self):
         self._out('-1 0 0 1 0 0 cm')
-        self._cap_op((-1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
+        self._cap_op(transform.FLIP_X)
 
     def _scale(self, scale_x, scale_y=None):
         if scale_y==None: scale_y = scale_x
         self._out('%.5F 0 0 %.5F 0 0 cm' % (scale_x, scale_y))
-        self._cap_op((scale_x, 0.0, 0.0, scale_y, 0.0, 0.0))
+        self._cap_op(transform.scaling(scale_x, scale_y))
 
     def line_width(self, w):
         self._out('%.2F w' % (w))

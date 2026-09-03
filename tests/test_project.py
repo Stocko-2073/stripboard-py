@@ -9,8 +9,6 @@ exists precisely so the solver does not re-run for each pass.
 
 from __future__ import annotations
 
-import os
-
 import pytest
 
 from stripboard import project

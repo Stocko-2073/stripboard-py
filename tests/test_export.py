@@ -107,7 +107,7 @@ def coords(lines) -> list[tuple[float, float]]:
 
 
 def test_output_is_bbox_normalised_and_scaled_to_pitch(label_board, tmp_path):
-    xs, ys = zip(*coords(nc(label_board, tmp_path)))
+    xs, ys = zip(*coords(nc(label_board, tmp_path)), strict=True)
     assert min(xs) == 0.0 and min(ys) == 0.0, "geometry is shifted to the origin"
     # The stroked bounding box is the board outline, which spans (width+1) x (height+1)
     # holes -- so a 6-column, 4-row label measures 7 x 5 pitches.
@@ -116,7 +116,7 @@ def test_output_is_bbox_normalised_and_scaled_to_pitch(label_board, tmp_path):
 
 
 def test_pitch_is_configurable(label_board, tmp_path):
-    xs, _ = zip(*coords(nc(label_board, tmp_path, pitch_mm=5.08)))
+    xs, _ = zip(*coords(nc(label_board, tmp_path, pitch_mm=5.08)), strict=True)
     assert max(xs) == pytest.approx(7 * 5.08, abs=1e-3)
 
 
