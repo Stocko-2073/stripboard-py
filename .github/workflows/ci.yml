@@ -23,9 +23,9 @@ jobs:
           - os: macos-latest
             python-version: "3.13"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -47,8 +47,15 @@ jobs:
           PY
           python -c "import stripboard, stripboard.router; print(stripboard.__version__)"
 
-      - name: Run the full test suite
-        run: pytest -m '' --cov=stripboard --cov-report=term-missing --cov-fail-under=70
+      - name: Run the fast suite, with coverage
+        run: pytest --cov=stripboard --cov-report=term-missing --cov-fail-under=80
+
+      - name: Run the solver tests
+        # Deliberately uninstrumented. Coverage instrumentation more than doubles the
+        # runtime of these four place->route tests (5s -> 7min for the whole suite) and
+        # they add about one percentage point, so measuring them is not worth the wall
+        # clock on every push. They still have to pass.
+        run: pytest -m slow
 
       - name: Render the examples
         # An end-to-end check that the packaged library still produces real output.
@@ -62,8 +69,8 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - run: pip install -e ".[dev]"
@@ -73,8 +80,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
       - run: pip install build twine

@@ -31,3 +31,5 @@ htmlcov/
 
 # macOS
 .DS_Store
+
+pypi-2fa.sh
