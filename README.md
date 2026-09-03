@@ -102,7 +102,7 @@ The solver lives in `stripboard.router` and is usable on its own; see
 ## Development
 
 ```sh
-git clone https://github.com/samw3/stripboard-py
+git clone https://github.com/Stocko-2073/stripboard-py
 cd stripboard-py
 pip install -e ".[dev]"
 
