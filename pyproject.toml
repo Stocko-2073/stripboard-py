@@ -1,0 +1,77 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "stripboard"
+version = "0.1.0"
+description = "Design stripboard (protoboard) circuit layouts in Python and render them to PDF, laser g-code, and SVG"
+readme = "README.md"
+requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Sam Washburn" }]
+keywords = ["stripboard", "protoboard", "perfboard", "veroboard", "eda", "pcb", "autorouter", "electronics"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Manufacturing",
+    "Topic :: Scientific/Engineering :: Electronic Design Automation (EDA)",
+    "Topic :: Multimedia :: Graphics :: Presentation",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "hypothesis>=6", "ruff>=0.6", "mypy>=1.11", "pytest-cov>=5"]
+
+[project.scripts]
+stripboard = "stripboard.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/samw3/stripboard-py"
+Repository = "https://github.com/samw3/stripboard-py"
+Changelog = "https://github.com/samw3/stripboard-py/blob/main/CHANGELOG.md"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+stripboard = ["data/*.scad", "templates/*.tmpl"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q -m 'not slow'"
+markers = [
+    "slow: exercises the autorouter solver or renders a full board (deselected by default)",
+    "integration: needs an external binary such as openscad (skipped when absent)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests", "tools"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["E501"]      # test fixtures often have long single-line literals
+"src/stripboard/font.py" = ["E501"]  # the glyph table is a wide data literal
+
+[tool.mypy]
+python_version = "3.12"
+packages = ["stripboard"]
+mypy_path = "src"
+strict = true
+# The public API is fully typed; internal rendering/routing helpers use loose local types
+# for brevity at this scale, so relax the strict sub-flags that only concern those helpers.
+disallow_untyped_defs = false
+disallow_incomplete_defs = false
+disallow_untyped_calls = false
+disallow_any_generics = false
+warn_unused_ignores = true

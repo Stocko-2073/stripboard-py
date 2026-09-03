@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+
+# Virtualenv
+.venv/
+venv/
+
+# Tooling caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+htmlcov/
+
+# Local regression corpus captured from private board designs -- never committed.
+.regression/
+
+# Generated board output
+*.pdf
+*.stl
+*.nc
+*.svg
+*.png
+!docs/**/*.png
+
+# macOS
+.DS_Store
