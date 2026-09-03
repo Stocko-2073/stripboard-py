@@ -34,10 +34,12 @@ All notable changes to this project are documented here. This project adheres to
 
 ### Changed
 - **The PDF backend is now built in**, replacing the PyFPDF (`fpdf` 1.7.2) dependency.
-  The package has **no runtime dependencies at all**. Rendered output is unchanged: the
-  page content streams for a corpus of 33 board variants are byte-identical before and
-  after the swap. PDF output is now also deterministic, since nothing stamps the current
-  time into the document.
+  The package has **no runtime dependencies at all**. Rendered output is unchanged: for a
+  corpus of 33 board variants, every drawing operator in every page content stream is
+  byte-identical before and after the swap. The one difference anywhere in the streams is
+  a single trailing newline that PyFPDF emitted before `endstream`, which PDF ignores as
+  whitespace. PDF output is now also deterministic, since nothing stamps the current time
+  into the document.
 
 - Design-rule diagnostics are now real warnings (`JumperConflictWarning`,
   `ShortCircuitWarning`, `TraceCollisionWarning`, all under `StripboardWarning`) instead

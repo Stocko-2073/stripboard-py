@@ -52,6 +52,9 @@ def pdf_trace(data: bytes) -> str:
         raise ValueError("no content streams found -- is the PDF compressed?")
     parts = []
     for i, s in enumerate(streams, 1):
+        # Newlines at the stream boundary are normalized away: they are whitespace as far
+        # as PDF is concerned, and different writers frame the stream differently (PyFPDF
+        # emitted one extra before `endstream`). Everything between is compared exactly.
         body = s.decode("latin-1").replace("\r\n", "\n").strip("\n")
         parts.append(f"%%% stream {i} ({len(body)} chars)\n{body}")
     return "\n".join(parts) + "\n"
