@@ -16,11 +16,18 @@ The fixture below is the exact stripboard.router problem produced by ``pengui_ph
 
 from __future__ import annotations
 
+import pytest
+
 import stripboard.router as R
 from stripboard.router.geometry import Rect
 from stripboard.router.model import Board, ComponentInstance, ComponentType, Net, PinDef
 from stripboard.router.placement import PlacementOptions
 from stripboard.router.result import RouteOptions, RouteStatus
+
+# Every test here drives the full place->route pipeline with retries, which is by far the
+# slowest thing in the suite (~3 minutes for the four of them). Deselected by default;
+# run them with `pytest -m ''` or `pytest -m slow`.
+pytestmark = pytest.mark.slow
 
 
 def _type(name, pins, keepouts=()):

@@ -1,0 +1,41 @@
+"""$title -- stripboard layout.
+
+Run:  python $filename   ->   $name.pdf   (DESIGN preview)
+Set designing = False for the FRONT/BACK/DESIGN build sheet.
+"""
+
+from stripboard import project
+
+designing = True
+
+
+def draw(sb):
+    sb.text(1, 'A', '$title')
+
+    # 1. Place components. Each builder returns a handle:
+    #    u1 = sb.dip(3, 'C', 3, 4, 'U1', pins=['GND', 'IN', 'OUT', 'VCC'])
+    #    r1 = sb.resist(10, 'C', '10K', l=4)
+    #    c1 = sb.cap(12, 'C')
+    #
+    # 2a. Route it yourself with jumpers, cuts and traces:
+    #     sb.jumper(2, 'B', 6, 'B', color='r')
+    #     sb.cut(4, 'C')
+    #     sb.trace(2, 'B')
+    #
+    # 2b. ...or declare the nets and let the router lay the copper:
+    #     sb.net('GND', u1.pin('GND'), c1.pin(2), color='k')
+    #     sb.net('VCC', u1.pin('VCC'), r1.pin(1), color='r')
+    #     sb.autoroute(seed=0)
+
+
+if __name__ == '__main__':
+    project(
+        draw,
+        name='$name',
+        width=$width,          # board columns
+        height='$height',      # board rows: a letter ('Z' == 26) or an int
+        designing=designing,
+        # label=True,          # also emit $name-label.pdf (silkscreen)
+        # gcode=True,          # also emit $name.nc (GRBL laser g-code)
+        # carrier=True,        # also emit $name.stl (3D-printed carrier)
+    )

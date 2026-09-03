@@ -1,7 +1,55 @@
-import math
-import subprocess
+"""Design stripboard (protoboard) circuit layouts in Python.
 
+Write a ``draw(sb)`` function that places components on the hole grid and either routes
+them by hand (``jumper``/``cut``/``trace``) or declares a netlist and calls
+``autoroute()``; then hand it to :func:`project`, which renders the board PDF and any
+label, laser g-code or carrier you ask for.
+
+    from stripboard import project
+
+    def draw(sb):
+        sb.text(1, 'A', 'HELLO')
+        sb.led(4, 'C')
+
+    project(draw, name='hello', width=12, height='K')
+
+Coordinates are a 1-based integer grid: columns are numbers along ``x``, rows are letters
+(``'A'`` == 1 ... ``'Z'`` == 26) or ints along ``y``. Copper strips run horizontally, so
+two pins on the same row start out connected.
+"""
+
+from __future__ import annotations
+
+import math
+import shutil
+import subprocess
+from importlib.resources import files
+from pathlib import Path
+
+from .drc import (
+    JumperConflictWarning,
+    ShortCircuitWarning,
+    StripboardWarning,
+    TraceCollisionWarning,
+)
+from .drc import warn as _warn
 from .pdf import PdfDocument
+
+__version__ = "0.1.0"
+
+# Bezier control-point ratio for approximating a quarter circle: 4 * ((sqrt(2) - 1) / 3).
+KAPPA = 0.5522848
+
+__all__ = [
+    "Component",
+    "StripBoard",
+    "project",
+    "StripboardWarning",
+    "JumperConflictWarning",
+    "ShortCircuitWarning",
+    "TraceCollisionWarning",
+    "__version__",
+]
 
 
 class Component:
@@ -225,10 +273,13 @@ class StripBoard:
         self.black()
 
     def dot_grid(self):
+        """Stipple the whole page with a 1-unit dot grid, as a layout aid."""
         self.line_width(0.1)
-        for y in range(1, self.page_height):
-            for x in range(1, self.page_width):
-                self._line(x,y,x,y)
+        # page_width/page_height are floats (they are divided by `scale`), so they have
+        # to be truncated before they can bound a range.
+        for y in range(1, int(self.page_height)):
+            for x in range(1, int(self.page_width)):
+                self._line(x, y, x, y)
 
     def origin_mark(self):
         self.red()
@@ -316,7 +367,7 @@ class StripBoard:
         self._push()
         if rotate:
             self._translate(0, -board_width/2)
-            self._rotate(90);
+            self._rotate(90)
             self.vtext(-3,-len(title)/2,title)
         else:
             self._translate(-len(title)/2, -board_height/2)
@@ -423,9 +474,8 @@ class StripBoard:
             self._cap_add([(x1,y1), (x2,y2)])
 
     def _ellipse(self,x,y,rx,ry,f='F',tl=True,tr=True,bl=True,br=True):
-        kappa = 0.5522848 # 4 * ((√(2) - 1) / 3)
-        ox = rx * kappa
-        oy = ry * kappa
+        ox = rx * KAPPA
+        oy = ry * KAPPA
         xe = x + rx
         ye = y + ry
         self._out('%.2F %.2F m' % (x-rx,y))
@@ -452,9 +502,8 @@ class StripBoard:
                             y + ry * math.sin(2*math.pi*i/n)) for i in range(n + 1)])
 
     def _arc(self,x,y,rx,ry,f='S',tl=True,tr=True,bl=True,br=True):
-        kappa = 0.5522848 # 4 * ((√(2) - 1) / 3)
-        ox = rx * kappa
-        oy = ry * kappa
+        ox = rx * KAPPA
+        oy = ry * KAPPA
         xe = x + rx
         ye = y + ry
         if tl: 
@@ -656,18 +705,26 @@ class StripBoard:
         )
 
     def esp32minikit(self, x, y):
-        # Composite footprint: draws sub-primitives directly (no per-sub-part registration).
-        self._draw_dip(5, 'C', 9, 10, "ESP32", False, [
+        """Draw an ESP32 MiniKit footprint with its top-left pin at (x, y).
+
+        A composite footprint: it draws sub-primitives directly rather than registering
+        parts, so it returns no handle and cannot be autorouted.
+        """
+        y = self.row(y)
+        self._draw_dip(x, y, 9, 10, "ESP32", False, [
             '7', '15', '5V', 'G', '16', '17', 'SDA', 'SCL', 'RX', 'TX',
             'RST', '36', '26', 'SCK', 'MISO', 'MOSI', 'CS0', '3V3', '13', '10'
         ],
         label_offset=0.5,
         label_scale=0.8,
-        skip_pins=[]
+        skip_pins=None
         )
-        self._draw_sip(4, 'C', 10, "", False, flip=True, pins=['6', '8', '2', '0', '4', '12', '32', '25', '27', 'GND'], label_scale=0.8)
-        self._draw_sip(4, 'C', 10, "", False, flip=True, pins=['6', '8', '2', '0', '4', '12', '32', '25', '27', 'GND'], label_scale=0.8)
-        self._draw_sip(15, 'C', 10, "", True, flip=False, pins=['GND', 'NC', '39', '35', '33', '34', '14', 'NC', '9', '11'], label_scale=0.8)
+        self._draw_sip(x - 1, y, 10, "", False, flip=True,
+                       pins=['6', '8', '2', '0', '4', '12', '32', '25', '27', 'GND'],
+                       label_scale=0.8)
+        self._draw_sip(x + 10, y, 10, "", True, flip=False,
+                       pins=['GND', 'NC', '39', '35', '33', '34', '14', 'NC', '9', '11'],
+                       label_scale=0.8)
 
     def rp2040(self, x, y, locked=True, ref=None):
         # Seeed studio XIAO RP2040 module -> builder returning a Component handle.
@@ -684,7 +741,7 @@ class StripBoard:
         pinmap = draw(x, ry, False) if locked else self._dip_pins(x, ry, 6, 7, pins, False, 1, [])
         return self._register(ref or "RP2040", pinmap, (x, ry), locked, redraw=draw)
 
-    def xiao(self, x, y, upside_down=False, labels_inside=True, label_offset=0, label_scale=0.6, mod=1, skip_pins=[], locked=True, ref=None):
+    def xiao(self, x, y, upside_down=False, labels_inside=True, label_offset=0, label_scale=0.6, mod=1, skip_pins=None, locked=True, ref=None):
         # Seeed studio XIAO RP2040 module -> builder returning a Component handle.
         ry = self.row(y)
         pins = ['D0', 'D1', 'D2', 'D3', 'D4', 'D5', 'TX', 'RX', 'D8', 'D9', 'D10', '3V3', 'GND', '5V']
@@ -754,7 +811,7 @@ class StripBoard:
         self.last_color = (16, 180, 16)
 
     def color(self,r,g=0,b=0):
-        if type(r) == tuple:
+        if isinstance(r, tuple):
             g = r[1]
             b = r[2]
             r = r[0]
@@ -790,8 +847,9 @@ class StripBoard:
         self.box(x+1.7,y-2+(l+1)/2,0.35,2,'F')
         self.black()
 
-    def _draw_dip(self, x, y, w, h, name="", upside_down=False, pins=None, labels_inside=True, label_offset=0, label_scale=0.78, mod=1, skip_pins=[], emit=True):
+    def _draw_dip(self, x, y, w, h, name="", upside_down=False, pins=None, labels_inside=True, label_offset=0, label_scale=0.78, mod=1, skip_pins=None, emit=True):
         y = self.row(y)
+        skip_pins = () if skip_pins is None else skip_pins
         pinmap = self._dip_pins(x, y, w, h, pins, upside_down, mod, skip_pins)
         if not emit:
             return pinmap
@@ -866,7 +924,7 @@ class StripBoard:
             self.pdf.set_fill_color(0)
         return pinmap
 
-    def _dip_pins(self, x, y, w, h, pins, upside_down, mod, skip_pins):
+    def _dip_pins(self, x, y, w, h, pins, upside_down, mod, skip_pins=None):
         """Name -> world (x, y) hole map for a DIP, mirroring ``_draw_dip``'s label logic.
 
         Left column at x (physical pins 1..h, top->bottom), right column at x+w (pins
@@ -874,6 +932,7 @@ class StripBoard:
         ``skip_pins`` (physical pin numbers) drops missing holes. Holes are a function of
         (x, row(y), w, h, mod, skip_pins) only -- upside_down never moves a hole.
         """
+        skip_pins = () if skip_pins is None else skip_pins
         y = self.row(y)
         result = {}
         if pins is None:
@@ -905,7 +964,7 @@ class StripBoard:
                 p += 1
         return result
 
-    def dip(self, x, y, w, h, name="", upside_down=False, pins=None, labels_inside=True, label_offset=0, label_scale=0.78, mod=1, skip_pins=[], locked=True, ref=None):
+    def dip(self, x, y, w, h, name="", upside_down=False, pins=None, labels_inside=True, label_offset=0, label_scale=0.78, mod=1, skip_pins=None, locked=True, ref=None):
         """Draw a DIP footprint and return a :class:`Component` handle for autorouting."""
         ry = self.row(y)
         kwargs = dict(name=name, upside_down=upside_down, pins=pins, labels_inside=labels_inside,
@@ -1391,9 +1450,8 @@ class StripBoard:
         if isinstance(color, str):
             color = self.wire_colors[color]
         y = self.row(y)
+        y2 = self.row(y2)
         if self.show_jumpers:
-            if(isinstance(y2, str)):
-                y2 = ord(y2) - 64
             self._check_jumper_hole(x, y)
             self._check_jumper_hole(x2, y2)
             self.connections.append((True, x, y, x2, y2))
@@ -1441,7 +1499,8 @@ class StripBoard:
         # lands in a hole already occupied by another jumper.
         for con in self.connections:
             if con[0] and con[1] == x and con[2] == y:
-                print("Jumper conflict! Two jumpers in same hole x=%d y=%s" % (x, self.row_name(y)))
+                _warn("Jumper conflict! Two jumpers in the same hole "
+                      f"x={x} y={self.row_name(y)}", JumperConflictWarning)
                 return
 
     def _draw_terminal(self, x, y, h, mod=1, shroud_y_offset=0, emit=True):
@@ -1497,9 +1556,32 @@ class StripBoard:
                               keepouts=self._terminal_keepouts(x, ry, h, shroud_y_offset))
 
     def bus(self, x, y1, y2):
-        for i in range(y1, y2-1):
-            self.jumper(x,i,x,i+1)
-        self.jumper(x,y1,x,y2,show_length=False)
+        """Chain single-row jumpers down column `x` from row `y1` to `y2`.
+
+        This is a single bare wire run down the column and soldered where it crosses
+        each strip, so it ties every strip in the span into one net. Drawn as one wire
+        rather than a ladder of separate jumpers, because a stripboard hole only takes
+        one wire end.
+        """
+        y1, y2 = self.row(y1), self.row(y2)
+        if y2 < y1:
+            y1, y2 = y2, y1
+        for i in range(y1, y2):
+            self.connections.append((True, x, i, x, i + 1))
+            self.connections.append((True, x, i + 1, x, i))
+        for i in range(y1, y2 + 1):
+            self.jdot(x, i)
+        if self.show_jumpers:
+            if self.black_and_white:
+                self.black()
+                self.line_width(.05)
+            else:
+                self.pdf.set_draw_color(*self.wire_colors['blue'])
+            self.wire(x, y1, x, y2)
+            if self.black_and_white:
+                self.line_width(.2)
+        self.pdf.set_draw_color(0)
+        self.pdf.set_fill_color(0)
 
     def trace_jumper(self, x, y, x2, y2, color):
         if not self.show_jumpers: return
@@ -1546,8 +1628,8 @@ class StripBoard:
         marked.append((x, y))
         for ncx, ncy in self.nc_points:
             if ncx == x and ncy == y:
-                print("Short circuit! Trace reached not-connected point x=%d y=%s"
-                      % (x, self.row_name(y)))
+                _warn("Short circuit! Trace reached a not-connected point "
+                      f"x={x} y={self.row_name(y)}", ShortCircuitWarning)
                 break
         foundLeftSlice = False
         foundRightSlice = False
@@ -1562,11 +1644,10 @@ class StripBoard:
                 foundRightSlice = True
             if con[1] == x - 0.5 and con[2] == y:
                 foundLeftSlice = True
-        error = False
         for origin in self.trace_origins:
             if origin[0] == x and origin[1] == y:
-                print("Collision! x=%d y=%d" % (x,y))
-                error = True
+                _warn(f"Trace collision! Two traced nets meet at "
+                      f"x={x} y={self.row_name(y)}", TraceCollisionWarning)
                 break
         if first:
             self.trace_origins.append((x,y))
@@ -1886,18 +1967,61 @@ class StripBoard:
                 print(f"  UNROUTED {ns.net_id}: {ns.reason}", file=file)
 
     def gen(self, pdf_name):
-        self.pdf.output(pdf_name)
+        """Write the board PDF to `pdf_name`, creating parent directories as needed."""
+        return self.pdf.output(pdf_name)
 
-    def gen_carrier(self, stl_name, board_thickness=1.7, nozzle=0.7, rotate=False):
+    def gen_carrier(self, stl_name, board_thickness=1.7, nozzle=0.7, rotate=False,
+                    runner=None):
+        """Render a 3D-printable carrier for this board to `stl_name`, via OpenSCAD.
+
+        The carrier is a shallow tray the finished board slots into. Sizing comes from
+        the board's own dimensions plus the thickness of the stock and your printer's
+        nozzle width.
+
+        Requires the ``openscad`` binary on PATH, and the BOSL OpenSCAD library that
+        ``Carrier.scad`` includes. `runner` replaces the subprocess call, for tests.
+
+        Raises:
+          RuntimeError: if openscad is missing, or exits non-zero.
+        """
         board_width = self.board_width
         board_height = self.board_height
         if rotate:
-            board_height = self.board_width
-            board_width = self.board_height
-        cmd = f"openscad /Users/samw3/prj/Make/stripboard/Carrier.scad -D columns={board_width} -D rows={board_height} -D boardThickness={board_thickness} -D nozzle={nozzle} -o {stl_name}"
-        # print(cmd)
-        process = subprocess.Popen(cmd.split(), stdout=subprocess.PIPE)
-        output, error = process.communicate()
+            board_width, board_height = board_height, board_width
+
+        scad = files("stripboard.data") / "Carrier.scad"
+        argv = [
+            "openscad", str(scad),
+            "-D", f"columns={board_width}",
+            "-D", f"rows={board_height}",
+            "-D", f"boardThickness={board_thickness}",
+            "-D", f"nozzle={nozzle}",
+            "-o", str(stl_name),
+        ]
+        if runner is not None:
+            return runner(argv)
+
+        exe = shutil.which("openscad")
+        if exe is None:
+            raise RuntimeError(
+                "gen_carrier() needs the 'openscad' binary on PATH. Install OpenSCAD "
+                "(https://openscad.org) along with its BOSL library, or pass "
+                "carrier=False."
+            )
+        argv[0] = exe
+
+        target = Path(stl_name)
+        if target.parent != Path():
+            target.parent.mkdir(parents=True, exist_ok=True)
+
+        proc = subprocess.run(argv, capture_output=True, text=True)
+        if proc.returncode != 0:
+            detail = (proc.stderr or proc.stdout or "").strip()
+            raise RuntimeError(
+                f"openscad failed (exit {proc.returncode}) building {stl_name}."
+                + (f"\n{detail}" if detail else "")
+            )
+        return target
 
     def _cap_bbox(self, kind):
         """Return (paths, xmin, xmax, ymin, ymax) for the captured strokes, or raise."""
@@ -1935,7 +2059,7 @@ class StripBoard:
         mm_paths = [[to_mm(pt) for pt in p] for p in paths]
         on = "M4" if dynamic else "M3"
         lines = [
-            "; GRBL laser g-code generated by stripboard.py gen_gcode()",
+            "; GRBL laser g-code generated by stripboard",
             f"; power=S{power} feed={feed} passes={passes} pitch_mm={pitch_mm} "
             f"mirror={mirror} flip_y={flip_y} dynamic={dynamic} laser_mode={laser_mode}",
         ]
@@ -1965,8 +2089,10 @@ class StripBoard:
                 lines.append("M5")
 
         lines += ["M5", "G0 X0 Y0"]
-        with open(name, "w") as fh:
-            fh.write("\n".join(lines) + "\n")
+        target = Path(name)
+        if target.parent != Path():
+            target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("\n".join(lines) + "\n", encoding="utf-8")
         print(f"wrote {name}: {len(mm_paths)} paths, "
               f"{w*pitch_mm:.1f} x {(ymax-ymin)*pitch_mm:.1f} mm")
 
@@ -1980,12 +2106,15 @@ class StripBoard:
 
         polys = "\n".join(f'  <polyline points="{" ".join(pt(q) for q in p)}"/>'
                           for p in paths)
-        with open(name, "w") as fh:
-            fh.write(
-                f'<svg xmlns="http://www.w3.org/2000/svg" width="{w:.3f}mm" '
-                f'height="{h:.3f}mm" viewBox="0 0 {w:.3f} {h:.3f}">\n'
-                f'<g fill="none" stroke="black" stroke-width="{stroke_mm}" '
-                f'stroke-linecap="round" stroke-linejoin="round">\n{polys}\n</g>\n</svg>\n')
+        target = Path(name)
+        if target.parent != Path():
+            target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="{w:.3f}mm" '
+            f'height="{h:.3f}mm" viewBox="0 0 {w:.3f} {h:.3f}">\n'
+            f'<g fill="none" stroke="black" stroke-width="{stroke_mm}" '
+            f'stroke-linecap="round" stroke-linejoin="round">\n{polys}\n</g>\n</svg>\n',
+            encoding="utf-8")
         print(f"wrote {name}: {len(paths)} paths, {w:.1f} x {h:.1f} mm")
 
     def _push(self):
@@ -1998,27 +2127,27 @@ class StripBoard:
             self._cap_ctm.pop()
 
     def _translate(self, x, y):
-        self._out('1 0 0 1 %.2F %.2F cm' % (x,y));
+        self._out('1 0 0 1 %.2F %.2F cm' % (x,y))
         self._cap_op((1.0, 0.0, 0.0, 1.0, x, y))
 
     def _rotate(self, angle):
-        angle = angle * 3.1415/180;
-        c = math.cos(angle);
-        s = math.sin(angle);
-        self._out('%.5F %.5F %.5F %.5F 0 0 cm' % (c,s,-s,c));
+        angle = angle * 3.1415/180
+        c = math.cos(angle)
+        s = math.sin(angle)
+        self._out('%.5F %.5F %.5F %.5F 0 0 cm' % (c,s,-s,c))
         self._cap_op((c, s, -s, c, 0.0, 0.0))
 
     def _flip_y(self):
-        self._out('1 0 0 -1 0 0 cm');
+        self._out('1 0 0 -1 0 0 cm')
         self._cap_op((1.0, 0.0, 0.0, -1.0, 0.0, 0.0))
 
     def _flip_x(self):
-        self._out('-1 0 0 1 0 0 cm');
+        self._out('-1 0 0 1 0 0 cm')
         self._cap_op((-1.0, 0.0, 0.0, 1.0, 0.0, 0.0))
 
     def _scale(self, scale_x, scale_y=None):
         if scale_y==None: scale_y = scale_x
-        self._out('%.5F 0 0 %.5F 0 0 cm' % (scale_x, scale_y));
+        self._out('%.5F 0 0 %.5F 0 0 cm' % (scale_x, scale_y))
         self._cap_op((scale_x, 0.0, 0.0, scale_y, 0.0, 0.0))
 
     def line_width(self, w):
