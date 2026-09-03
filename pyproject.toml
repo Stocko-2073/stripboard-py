@@ -60,8 +60,21 @@ src = ["src", "tests", "tools"]
 select = ["E", "F", "I", "UP", "B"]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["E501"]      # test fixtures often have long single-line literals
+"tests/*" = ["E501"]                 # test fixtures often have long single-line literals
 "src/stripboard/font.py" = ["E501"]  # the glyph table is a wide data literal
+
+# `l` is lead length or pin count, and it is part of the public API -- board files are
+# written as `sb.resist(18, 'R', '330', l=8)`. Renaming it would break every existing
+# design for a cosmetic rule, so it stays.
+"src/stripboard/canvas.py" = ["UP031"]
+"src/stripboard/footprints/passives.py" = ["E741"]
+"src/stripboard/footprints/ics.py" = ["E741"]
+"src/stripboard/footprints/connectors.py" = ["E741"]
+
+# The drawing primitives emit raw PDF content-stream operators, where one template with
+# several coordinates (`'%.2F %.2F m %.2F %.2F l S'`) reads better than the equivalent
+# f-string and keeps the precision visible next to the operator it belongs to.
+"src/stripboard/board.py" = ["UP031"]
 
 [tool.mypy]
 python_version = "3.12"

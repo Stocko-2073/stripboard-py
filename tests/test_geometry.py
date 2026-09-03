@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from stripboard import _rows
+from stripboard import parse_row
 
 
 @pytest.mark.parametrize(("letter", "index"), [
@@ -33,8 +33,8 @@ def test_row_is_idempotent(board):
     ("A", 1), ("K", 11), ("Z", 26), (1, 1), (11, 11), (26, 26), (40, 40),
 ])
 def test_rows_accepts_letters_and_ints(height, expected):
-    """`_rows` sizes a board from the same two spellings that `row` accepts."""
-    assert _rows(height) == expected
+    """`parse_row` sizes a board from the same two spellings that `row` accepts."""
+    assert parse_row(height) == expected
 
 
 def test_board_height_is_stored_coerced(make_board):
