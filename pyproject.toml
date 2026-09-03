@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "stripboard"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Design stripboard (protoboard) circuit layouts in Python and render them to PDF, laser g-code, and SVG"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
 license-files = ["LICENSE"]
-authors = [{ name = "Sam Washburn" }]
+authors = [{ name = "Stocko" }]
 keywords = ["stripboard", "protoboard", "perfboard", "veroboard", "eda", "pcb", "autorouter", "electronics"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -36,6 +36,9 @@ stripboard = "stripboard.cli:main"
 Homepage = "https://github.com/Stocko-2073/stripboard-py"
 Repository = "https://github.com/Stocko-2073/stripboard-py"
 Changelog = "https://github.com/Stocko-2073/stripboard-py/blob/main/CHANGELOG.md"
+
+[tool.setuptools.dynamic]
+version = { attr = "stripboard.__version__" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

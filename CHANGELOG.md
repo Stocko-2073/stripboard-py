@@ -3,7 +3,19 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.1] - 2026-09-03
+
+### Changed
+- Package author metadata is now `Stocko` rather than a personal name. This is the
+  `Author` field PyPI shows under *Credits*; 0.1.0 keeps the old value, since a published
+  version's metadata is immutable.
+- The version is declared in one place. `pyproject.toml` reads it from
+  `stripboard.__version__` via setuptools' `dynamic` version support, so a release cannot
+  ship a package whose `__version__` disagrees with its distribution metadata.
+
+## [0.1.0] - 2026-09-03
+
+First public release.
 
 ### Added
 - `StripBoard` is now a facade composed from mixins, one module per concern (`canvas`,

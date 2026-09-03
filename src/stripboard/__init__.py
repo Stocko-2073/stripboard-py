@@ -36,7 +36,8 @@ from .drc import (
 from .geometry import parse_row
 from .project import project
 
-__version__ = "0.1.0"
+# The single source of truth for the version; pyproject.toml reads it from here.
+__version__ = "0.1.1"
 
 __all__ = [
     "StripBoard",
