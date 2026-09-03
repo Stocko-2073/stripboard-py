@@ -1,0 +1,61 @@
+name: Publish
+
+# Publishing is driven by GitHub Releases: cut a release and this uploads that commit's
+# artifacts to PyPI. Authentication is Trusted Publishing (OIDC) -- PyPI verifies the
+# workflow's identity directly, so there is no API token anywhere in this repository.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  build:
+    name: Build and check the distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+          pip install build twine
+
+      - name: Run the full test suite
+        # A release should not be publishable if the tests do not pass on it.
+        run: pytest -m ''
+
+      - name: Build
+        run: python -m build
+
+      - name: Check the metadata renders
+        run: twine check --strict dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+  publish:
+    name: Upload to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/stripboard
+    permissions:
+      # The only permission the upload needs: mint an OIDC token for PyPI to verify.
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - uses: pypa/gh-action-pypi-publish@release/v1

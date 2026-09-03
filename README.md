@@ -26,12 +26,12 @@ def draw(sb):
 project(draw, name='blinker', width=18, height='T')
 ```
 
-![A 555 blinker, autorouted](docs/images/blinker_555.png)
+![A 555 blinker, autorouted](https://raw.githubusercontent.com/Stocko-2073/stripboard-py/main/docs/images/blinker_555.png)
 
 You declare what is *electrically* true and `autoroute()` works out the copper — which
 strips carry which net, where the jumpers go, and which tracks to cut. Or route it
 yourself with `jumper()` / `cut()` / `trace()` and keep full control. Both workflows are
-in [`examples/`](examples).
+in [`examples/`](https://github.com/Stocko-2073/stripboard-py/tree/main/examples).
 
 **No runtime dependencies.** Pure standard library, including the PDF writer and the
 autorouter.
@@ -69,7 +69,7 @@ The three views on the build sheet are the three ways you actually look at the b
 **FRONT** as you place components, **BACK** mirrored as you cut tracks and solder, and
 **DESIGN** with each net flood-filled in colour so you can check connectivity by eye.
 
-![A silkscreen label](docs/images/header_breakout_label.png)
+![A silkscreen label](https://raw.githubusercontent.com/Stocko-2073/stripboard-py/main/docs/images/header_breakout_label.png)
 
 ## Coordinates
 
@@ -97,7 +97,7 @@ draws the jumpers and cuts it chose. Pass `locked=False` to a part builder to le
 solver place that part too, and it will be drawn wherever it lands.
 
 The solver lives in `stripboard.router` and is usable on its own; see
-[`docs/router-spec.md`](docs/router-spec.md).
+[`docs/router-spec.md`](https://github.com/Stocko-2073/stripboard-py/blob/main/docs/router-spec.md).
 
 ## Development
 
@@ -114,4 +114,4 @@ mypy
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](https://github.com/Stocko-2073/stripboard-py/blob/main/LICENSE).

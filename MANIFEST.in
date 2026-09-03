@@ -1,0 +1,14 @@
+# The sdist should be enough to build, test, and understand the project.
+include CHANGELOG.md CONTRIBUTING.md MANIFEST.in
+recursive-include examples *.py
+recursive-include tools *.py
+recursive-include docs *.md *.png
+recursive-include tests *.py
+recursive-include src/stripboard *.scad *.tmpl
+include .github/workflows/*.yml
+
+# Never ship local scratch.
+prune .regression
+prune .venv
+prune dist
+global-exclude *.py[cod] .DS_Store
