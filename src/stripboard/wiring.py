@@ -48,6 +48,13 @@ class WiringMixin(_Base):
         self._ellipse(x,y,0.5,0.5,'S')
 
     def cut(self, x, y, y2=None):
+        """Break the copper at hole ``(x, y)``, or at every hole from ``y`` down to ``y2``.
+
+        An integer ``x`` drills the hole out, which splits that row's track and takes the
+        hole with it. This is the usual way to cut stripboard and the form the autorouter
+        emits. A half-column ``x`` such as ``7.5`` instead severs the track between
+        columns 7 and 8 and leaves both holes usable. Both are drawn in red, and both
+        stop a :meth:`trace`."""
         if not self.show_crosses:
             return
         y = self.row(y)
@@ -209,6 +216,27 @@ class WiringMixin(_Base):
         self.pdf.set_draw_color(0)
         self.pdf.set_fill_color(0)
 
+    def link(self, x, y1, y2, color='yellow', ref=None):
+        """Place a wire down column `x` by hand and return its :class:`Component` handle.
+
+        A single wire soldered at rows `y1` and `y2` only. Unlike :meth:`jumper`, the
+        autorouter knows it is there: the two ends are pins, so ``handle.pin('1')`` and
+        ``handle.pin('2')`` can join nets like any other part's, and the span between
+        them is a keep-out, so nothing else is routed through the wire. That makes it the
+        way to place a crossing yourself and let ``autoroute()`` work around it.
+
+        :meth:`jumper`, :meth:`cut` and :meth:`bus` draw copper the solver cannot see, so
+        mixing them with ``autoroute()`` on one board risks a collision it has no way to
+        know about."""
+        y1, y2 = self.row(y1), self.row(y2)
+        if y2 < y1:
+            y1, y2 = y2, y1
+        self.jumper(x, y1, x, y2, color=color)
+        # The holes the wire arcs over, as a local rect -- empty when the rows are adjacent.
+        keepouts = ((0, 1, 0, y2 - y1 - 1),) if y2 - y1 > 1 else ()
+        return self._register(ref or "LINK", {'1': (x, y1), '2': (x, y2)}, (x, y1),
+                              locked=True, keepouts=keepouts)
+
     def keepout(self, x, y, w=1, h=1, show=False, ref=None):
         """Register a pin-less keep-out region and return the :class:`Component` handle.
 
@@ -216,9 +244,8 @@ class WiringMixin(_Base):
         (``y`` accepts a row letter). It has no pins and draws no component -- it is purely
         a routing constraint: the autorouter forbids pins and jumper arcs on those cells,
         so use it to reserve space under a mounting hole, a tall part, or any mechanical
-        obstruction. The region is always locked (fixed where you place it). With ``show``
-        (default) it is shaded in the current view so you can see it while designing; pass
-        ``show=False`` for an invisible constraint."""
+        obstruction. The region is always locked (fixed where you place it) and draws
+        nothing; pass ``show=True`` to shade it in the current view while designing."""
         ry = self.row(y)
         if show:
             self._shade_rect(x - 0.5, ry - 0.5, w, h)

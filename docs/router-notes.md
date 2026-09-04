@@ -225,4 +225,6 @@ Listed here because they shape code:
   so a lone pin is `X.X` (cut, point, cut).
 - **Determinism:** tie-breaking among equal-cost placements/routes and multiple
   shortest paths; SA seed. Needed for reproducible tests.
-- **Infeasibility:** what to output when a net can't be routed collision-free.
+- ~~**Infeasibility**~~ — resolved; the net carries a `NetStatus` with a reason,
+  the run carries a `RouteStatus`, and `diagnose.explain_net` reports the row-pair
+  feasibility a failing net was searched against.

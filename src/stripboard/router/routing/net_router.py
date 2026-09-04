@@ -378,13 +378,24 @@ def _diameter_lb(info: _TopoInfo, assigned: dict[int, int]) -> float:
     return best
 
 
-def _feasible_columns(ctx: _Ctx, ya: int, yb: int) -> list[int]:
+def feasible_columns(
+    board: Board,
+    net_id: str,
+    ya: int,
+    yb: int,
+    obstacles: OccupancyIndex,
+    own_pins: set[Point],
+) -> list[int]:
     """Every board column where a jumper (ya,yb) is collision-free (SPEC/NOTES section 2)."""
     return [
         c
-        for c in range(1, ctx.board.w + 1)
-        if not _jumper_conflicts(Jumper(c, ya, yb, ctx.net.id), ctx.obstacles, ctx.own_pins)
+        for c in range(1, board.w + 1)
+        if not _jumper_conflicts(Jumper(c, ya, yb, net_id), obstacles, own_pins)
     ]
+
+
+def _feasible_columns(ctx: _Ctx, ya: int, yb: int) -> list[int]:
+    return feasible_columns(ctx.board, ctx.net.id, ya, yb, ctx.obstacles, ctx.own_pins)
 
 
 def _route_all_topologies(ctx: _Ctx, budget: list[int] | None = None) -> NetRouting | None:
@@ -445,19 +456,23 @@ def _route_all_topologies(ctx: _Ctx, budget: list[int] | None = None) -> NetRout
     return (best[2], best[3]) if best is not None else None
 
 
-def _steiner_row_candidates(ctx: _Ctx) -> list[int]:
+def steiner_row_candidates(board_h: int, rows: list[int]) -> list[int]:
     """Empty rows to try as a detour, nearest-first to the net's pin-row span (interior gaps
     first, then outward). Capped so the fallback stays bounded."""
-    occupied = set(ctx.rows)
-    lo, hi = ctx.rows[0], ctx.rows[-1]
+    occupied = set(rows)
+    lo, hi = rows[0], rows[-1]
 
     def key(r: int) -> tuple[int, int]:
         dist = 0 if lo <= r <= hi else min(abs(r - lo), abs(r - hi))
         return (dist, r)  # total order -> deterministic candidate list
 
-    cands = [r for r in range(1, ctx.board.h + 1) if r not in occupied]
+    cands = [r for r in range(1, board_h + 1) if r not in occupied]
     cands.sort(key=key)
     return cands[:_MAX_STEINER_ROWS]
+
+
+def _steiner_row_candidates(ctx: _Ctx) -> list[int]:
+    return steiner_row_candidates(ctx.board.h, ctx.rows)
 
 
 def _route_steiner_fallback(ctx: _Ctx) -> NetRouting | None:

@@ -1,7 +1,7 @@
 """Design stripboard (protoboard) circuit layouts in Python.
 
 Write a ``draw(sb)`` function that places components on the hole grid and either routes
-them by hand (``jumper``/``cut``/``trace``) or declares a netlist and calls
+them by hand (``jumper``/``link``/``cut``/``trace``) or declares a netlist and calls
 ``autoroute()``; then hand it to :func:`project`, which renders the board PDF and any
 label, laser g-code or carrier you ask for::
 
@@ -32,12 +32,13 @@ from .drc import (
     ShortCircuitWarning,
     StripboardWarning,
     TraceCollisionWarning,
+    UnroutableNetWarning,
 )
 from .geometry import parse_row
 from .project import project
 
 # The single source of truth for the version; pyproject.toml reads it from here.
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 
 __all__ = [
     "StripBoard",
@@ -49,5 +50,6 @@ __all__ = [
     "MissingGlyphWarning",
     "ShortCircuitWarning",
     "TraceCollisionWarning",
+    "UnroutableNetWarning",
     "__version__",
 ]

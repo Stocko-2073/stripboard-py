@@ -3,6 +3,57 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-09-04
+
+### Added
+- The router says why a net did not route. Every failure used to read `no collision-free
+  route found`; a net now carries the geometry that defeated it. `row_conflicts` is a
+  placement-only check for the failures that need no search at all -- a net's strip on a
+  row has to cover its own outermost pins there and put its track cuts on the columns
+  immediately outside them, so a foreign pin anywhere in that reach is fatal whatever the
+  topology, jumper column or detour row. Those nets are named precisely and are no longer
+  searched for, which also removes them from all sixty rip-up attempts.
+- `explain_net(board, instances, netlist, net_id)` routes one net on its own and reports
+  the feasibility the search worked from: the columns in which a jumper could bridge each
+  pair of the net's rows, and -- for a pair with none -- what occupies every column. Pass
+  a solved `Routing` and every other net's copper joins the obstacles, which answers which
+  net took the column this one needed; leave it out and the net meets the parts alone,
+  which answers whether it could route on this placement at all. `sb.explain(net_id)`
+  prints it for a board. This closes the last open item in `docs/router-notes.md` §6.
+- `UnroutableNetWarning`, raised by `autoroute()` for each net it could not route, so a
+  half-wired board is loud without reading the report. Like the other design-rule
+  warnings it can be escalated: `warnings.simplefilter('error', StripboardWarning)` makes
+  an unroutable board fail the build.
+- `sb.link(x, y1, y2)` places a wire by hand that the autorouter routes around -- its two
+  ends are pins, so `handle.pin('1')` joins a net like any other part's, and the span
+  between them is a keep-out. `jumper()`, `cut()` and `bus()` draw copper the solver
+  cannot see, so mixing them with `autoroute()` was a silent collision risk with no
+  supported alternative.
+- `sb.route_report(verbose=True)` adds what you need in front of the board: every net's
+  jumpers with their lengths, the total wire end to end, and which cuts are buried under a
+  part body and so have to be made first. `sb.cuts_under_bodies()` returns that last set.
+- `sb.stepstick()`, the 2x8 stepper-driver carrier, with `variant='a4988'` or
+  `'tmc2209'` for the pin names and a body keep-out for the socket. It is the first
+  builder to carry both named pins and a keep-out; `dip()`, `sip()` and `xiao()` still
+  register pins only.
+- `feasible_columns` and `steiner_row_candidates` are now part of the router's surface,
+  since the diagnostics answer the same questions the search does.
+
+### Changed
+- Pin order is documented where it is used. `dip()` and `sip()` state how a `pins` list is
+  consumed, `resist()` states that pin `'1'` is the top hole and what `upside_down` swaps,
+  and `docs/coordinates.md` says it once for all of them. Previously the DIP order was
+  written down only on a private helper and the SIP order nowhere at all.
+- `cut()` is documented. An integer column drills the hole out and splits that row's
+  track, which is the form the autorouter emits; a half-column such as `7.5` severs the
+  track between two columns and leaves both holes usable. Neither form was written down,
+  and `docs/coordinates.md` described the half-column behaviour on an integer call.
+- `docs/coordinates.md` states that a cut costs a whole hole, so two different nets cannot
+  have pins in adjacent holes on one row. That follows from `docs/router-spec.md` §3.3 and
+  has always been enforced, but it was discoverable only by having a net fail.
+- `keepout()`'s docstring said shading was the default when the default is `show=False`.
+- `xiao()`'s comment named the RP2040 board specifically; the pin map fits the family.
+
 ## [0.1.1] - 2026-09-03
 
 ### Changed

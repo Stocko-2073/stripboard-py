@@ -18,6 +18,15 @@ from __future__ import annotations
 
 from .cost import CostBreakdown, compute_cost
 from .cuts import physical_cuts
+from .diagnose import (
+    Blocker,
+    NetExplanation,
+    RowConflict,
+    RowPair,
+    RowPins,
+    explain_net,
+    row_conflicts,
+)
 from .geometry import Point, Rect, manhattan, parse_row
 from .model import (
     Board,
@@ -88,6 +97,14 @@ __all__ = [
     "is_connected",
     "compute_cost",
     "CostBreakdown",
+    # diagnostics
+    "explain_net",
+    "NetExplanation",
+    "RowPins",
+    "RowPair",
+    "Blocker",
+    "row_conflicts",
+    "RowConflict",
     # placement
     "place",
     "place_candidates",

@@ -30,7 +30,8 @@ project(draw, name='blinker', width=18, height='T')
 
 You declare what is *electrically* true and `autoroute()` works out the copper — which
 strips carry which net, where the jumpers go, and which tracks to cut. Or route it
-yourself with `jumper()` / `cut()` / `trace()` and keep full control. Both workflows are
+yourself with `jumper()` / `link()` / `cut()` / `trace()` and keep full control. Both
+workflows are
 in [`examples/`](https://github.com/Stocko-2073/stripboard-py/tree/main/examples).
 
 **No runtime dependencies.** Pure standard library, including the PDF writer and the
@@ -95,6 +96,10 @@ result = sb.autoroute(seed=0)
 `autoroute()` returns the solver's result — status, cost, per-net status, validation — and
 draws the jumpers and cuts it chose. Pass `locked=False` to a part builder to let the
 solver place that part too, and it will be drawn wherever it lands.
+
+To place a crossing yourself and have the solver route around it, use `link(x, y1, y2)`
+rather than `jumper()`: its two ends are pins and its span is a keep-out, so hand-placed
+and autorouted copper can share a board.
 
 The solver lives in `stripboard.router` and is usable on its own; see
 [`docs/router-spec.md`](https://github.com/Stocko-2073/stripboard-py/blob/main/docs/router-spec.md).

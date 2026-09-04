@@ -22,7 +22,7 @@ src/stripboard/
   canvas.py         drawing primitives, colours, the transform stack
   text.py           the four text orientations
   footprints/       part builders, grouped by kind
-  wiring.py         jumpers, cuts, drills, keep-outs
+  wiring.py         jumpers, hand-placed links, cuts, drills, keep-outs
   connectivity.py   trace(): flood-fill a net to check it
   netlist.py        net() and connect()
   autoroute.py      driving the router and drawing its result

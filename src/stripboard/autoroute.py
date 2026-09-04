@@ -14,6 +14,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from .drc import UnroutableNetWarning
+from .drc import warn as _warn
+
 if TYPE_CHECKING:
     # Resolves the state and sibling methods every mixin shares; see _state.py. At
     # runtime the base is `object`, so the MRO is unchanged.
@@ -89,6 +92,10 @@ class AutorouteMixin(_Base):
                 p = placements.get(c.id)
                 if p is not None:
                     c._redraw(p.origin[0], p.origin[1], p.flipped)
+        for ns in result.net_status:
+            if not ns.routed:
+                _warn(f"Net {ns.net_id!r} could not be routed: {ns.reason}",
+                      UnroutableNetWarning)
         self._render_routing(result, net_colors=net_colors, show_cuts=show_cuts)
         if show_keepouts:
             # Shade keep-outs where the solver *placed* each part, not where it was drawn --
@@ -135,11 +142,55 @@ class AutorouteMixin(_Base):
                 self._shade_rect(r.x0 - 0.5, r.y0 - 0.5,
                                  r.x1 - r.x0 + 1, r.y1 - r.y0 + 1, color)
 
-    def route_report(self, result=None, *, file=None):
+    def explain(self, net_id, *, in_context=True, file=None):
+        """Print, and return, why one declared net does or does not route.
+
+        By default the net is examined against the board's last solve, so the report says
+        which other net's copper took the columns it wanted. Pass ``in_context=False`` to
+        meet the parts alone instead, which says whether the net could route on this
+        placement at all -- the useful question when a net fails with the board empty."""
+        R = self._ensure_router()
+        board, instances, netlist = self._build_problem()
+        routing = None
+        if in_context and self.last_result is not None:
+            routing = self.last_result.routing
+        report = R.explain_net(board, instances, netlist, net_id, routing=routing)
+        print(report, file=file)
+        return report
+
+    def _placed_instances(self, result):
+        """The solve's component instances, each where the solver actually put it."""
+        _, instances, _ = self._build_problem()
+        placements = {p.instance_id: p for p in result.placements}
+        return [
+            inst.moved(p.origin, p.flipped)
+            if not inst.locked and (p := placements.get(inst.id)) is not None
+            else inst
+            for inst in instances
+        ]
+
+    def cuts_under_bodies(self, result=None):
+        """The solve's cuts that fall under a part body, sorted.
+
+        These are the ones to make before the part goes on, so they drive build order."""
+        r = result if result is not None else self.last_result
+        if r is None:
+            return []
+        body = {
+            p
+            for inst in self._placed_instances(r)
+            for rect in inst.world_keepouts()
+            for p in rect.points()
+        }
+        return sorted(r.physical_cuts & body, key=lambda p: (p[1], p[0]))
+
+    def route_report(self, result=None, *, verbose=False, file=None):
         """Print the standard autoroute summary (status/routed/jumpers/cuts + unrouted nets).
 
         Uses ``self.last_result`` (set by :meth:`autoroute`) when no result is passed; a
-        no-op for hand-routed boards that never called autoroute()."""
+        no-op for hand-routed boards that never called autoroute(). ``verbose`` adds what
+        you need in front of the board: every net's jumpers with their lengths, how much
+        wire that is in total, and which cuts are buried under a part body."""
         r = result if result is not None else self.last_result
         if r is None:
             return
@@ -152,3 +203,24 @@ class AutorouteMixin(_Base):
         for ns in r.net_status:
             if not ns.routed:
                 print(f"  UNROUTED {ns.net_id}: {ns.reason}", file=file)
+        if verbose:
+            self._verbose_report(r, file=file)
+
+    def _verbose_report(self, r, *, file=None):
+        """The per-net jumper list, the wire total, and the cuts under part bodies."""
+        wire = sum(j.vlength() for j in r.routing.all_jumpers())
+        print(f"wire: {r.cost.num_jumpers} jumpers, {wire} holes end to end", file=file)
+        for net_id in sorted(r.routing.jumpers):
+            hops = ", ".join(
+                f"{j.x} {self.row_name(j.ya)}-{self.row_name(j.yb)} ({j.vlength()})"
+                for j in sorted(r.routing.jumpers[net_id], key=lambda j: (j.x, j.ya))
+            )
+            print(f"  {net_id:<14} {hops}", file=file)
+
+        buried = self.cuts_under_bodies(r)
+        print(f"cuts under a part body: {len(buried)} of {r.cost.num_cuts}", file=file)
+        by_row: dict[int, list[int]] = {}
+        for x, y in buried:
+            by_row.setdefault(y, []).append(x)
+        for y, xs in by_row.items():
+            print(f"  row {self.row_name(y):<3} {', '.join(str(x) for x in xs)}", file=file)

@@ -24,6 +24,7 @@ __all__ = [
     "ShortCircuitWarning",
     "TraceCollisionWarning",
     "MissingGlyphWarning",
+    "UnroutableNetWarning",
     "warn",
 ]
 
@@ -46,6 +47,10 @@ class TraceCollisionWarning(StripboardWarning):
 
 class MissingGlyphWarning(StripboardWarning):
     """A character has no glyph in the built-in stroke font, so it was not drawn."""
+
+
+class UnroutableNetWarning(StripboardWarning):
+    """A declared net could not be routed, so the board is not fully wired."""
 
 
 def warn(message: str, category: type[StripboardWarning]) -> None:
