@@ -5,22 +5,39 @@ is easy to get wrong.
 
 ## Branches and pull requests
 
-Never commit to `main`. Branch first, short kebab-case name for the change itself
+`dev` is the default branch and where every change lands. Never commit to `dev` or to
+`main`. Branch off `dev` first, short kebab-case name for the change itself
 (`router-diagnostics`, not `fix` or a date).
 
-Push the branch and open a PR with `gh pr create` when the work is ready — that is the
-normal flow. **Merging, tagging and releasing are not**: releases are cut as GitHub
-Releases and `publish.yml` uploads to PyPI over Trusted Publishing, so a tag is a publish.
+Push the branch and open a PR against `dev` with `gh pr create` when the work is ready —
+that is the normal flow. **Releasing is not**: `main` is written only by `publish.yml`,
+and running it is a publish.
 
 The PR is the gate, because `ci.yml` runs on `pull_request`:
 
-* `test` — Python 3.12/3.13/3.14 on Linux plus 3.13 on macOS; asserts the package has no
-  runtime dependencies; fast suite with an 80% coverage floor; `pytest -m slow`
-  uninstrumented; renders every board in `examples/`
+* `test` — Python 3.14 on Linux; asserts the package has no runtime dependencies; fast
+  suite with an 80% coverage floor; `pytest -m slow` uninstrumented; renders every board
+  in `examples/`
 * `lint` — `ruff check src tests tools`, then `mypy`
 * `build` — wheel + sdist, `twine check`, and a check that the package data really ships
 
 Run `pytest -m ''`, `ruff` and `mypy` locally first anyway. CI is slow to tell you.
+
+## Releasing
+
+`publish.yml`, run by hand from the Actions tab with the version as a required input. It
+fast-forwards `main` onto `dev`, tags that commit, cuts the GitHub Release and uploads to
+PyPI over Trusted Publishing. PyPI comes last, because it is the only step that cannot be
+taken back.
+
+It refuses to start unless `dev` already carries the version being released:
+
+* `stripboard.__version__` equals the input exactly, string for string
+* no `v<version>` tag exists, and the version is newer than every tag that does
+* `CHANGELOG.md` has a `## [<version>] - <date>` section, which becomes the release notes
+
+So the version bump and its changelog entry are part of the work on `dev`, not something
+the release does to it.
 
 ## House rules for the code
 
