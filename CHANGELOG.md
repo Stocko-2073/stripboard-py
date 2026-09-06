@@ -3,6 +3,19 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-09-06
+
+### Changed
+- The release no longer runs the test suite. `publish.yml` ran `pytest -m ''` on a commit
+  that had already been through CI twice, on the pull request and again on the push to
+  `dev`, and that one step was nearly the whole release: of a five and a half minute run,
+  the merge took eight seconds and the upload fifteen. `dev` is a protected branch instead
+  -- `test`, `lint` and `build` have to pass, on a branch up to date with `dev`, before
+  anything merges -- so the commit being released is tested before it is ever a candidate.
+  The required checks on `dev` are therefore load-bearing rather than a convenience.
+- The release installs the package without its `dev` extra, since nothing left in that
+  workflow runs the tests or the linters.
+
 ## [0.3.0] - 2026-09-06
 
 ### Changed

@@ -1,10 +1,15 @@
 name: Publish
 
 # Releasing is one gesture: run this workflow with the version being released. It checks
-# that `dev` really carries that version, runs the full suite, fast-forwards `main` onto
-# `dev`, tags it, cuts the GitHub Release from `CHANGELOG.md`, and only then uploads to
-# PyPI. Authentication is Trusted Publishing (OIDC) -- PyPI verifies the workflow's
-# identity directly, so there is no API token anywhere in this repository.
+# that `dev` really carries that version, builds, fast-forwards `main` onto `dev`, tags it,
+# cuts the GitHub Release from `CHANGELOG.md`, and only then uploads to PyPI.
+# Authentication is Trusted Publishing (OIDC) -- PyPI verifies the workflow's identity
+# directly, so there is no API token anywhere in this repository.
+#
+# The suite does not run here. `dev` is a protected branch: `test`, `lint` and `build` have
+# to pass on a branch that is up to date with it before anything merges, so the commit
+# being released has already been through CI. That protection is what makes this safe --
+# without it a release would reach PyPI with nothing having tested it.
 #
 # `main` therefore only ever holds a released, green commit, and PyPI -- the one step that
 # cannot be undone -- happens last, after everything that can still be corrected.
@@ -24,7 +29,7 @@ concurrency:
 
 jobs:
   verify:
-    name: Check the version and the tests
+    name: Check the version and build
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -41,9 +46,11 @@ jobs:
           python-version: "3.14"
 
       - name: Install
+        # No dev extra: nothing in this workflow runs the tests or the linters. The
+        # editable install is here so the version check can import the package.
         run: |
           python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+          pip install -e .
           pip install build packaging twine
 
       - name: Confirm the version was bumped
@@ -99,10 +106,6 @@ jobs:
 
           print(f"releasing {version}")
           PY
-
-      - name: Run the full test suite
-        # A release should not be publishable if the tests do not pass on it.
-        run: pytest -m ''
 
       - name: Build
         run: python -m build

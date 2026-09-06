@@ -13,7 +13,9 @@ Push the branch and open a PR against `dev` with `gh pr create` when the work is
 that is the normal flow. **Releasing is not**: `main` is written only by `publish.yml`,
 and running it is a publish.
 
-The PR is the gate, because `ci.yml` runs on `pull_request`:
+The PR is the gate, and `dev` is protected so that it really is one: `test`, `lint` and
+`build` all have to pass, on a branch that is up to date with `dev`, before anything
+merges. `ci.yml` runs them on `pull_request`:
 
 * `test` — Python 3.14 on Linux; asserts the package has no runtime dependencies; fast
   suite with an 80% coverage floor; `pytest -m slow` uninstrumented; renders every board
@@ -38,6 +40,10 @@ It refuses to start unless `dev` already carries the version being released:
 
 So the version bump and its changelog entry are part of the work on `dev`, not something
 the release does to it.
+
+The release does not run the tests. It relies on `dev`'s protection for that, which is why
+the required checks on `dev` are not optional: drop them and a release reaches PyPI with
+nothing having tested the commit.
 
 ## House rules for the code
 
