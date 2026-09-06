@@ -3,6 +3,28 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-09-06
+
+### Changed
+- Continuous integration runs one job where it ran four. The matrix covered Python 3.12,
+  3.13 and 3.14 on Linux plus 3.13 on macOS, which is a great deal of wall clock for a
+  package with no runtime dependencies and no platform-specific code; `test` is now Python
+  3.14 on Linux alone, and `lint` and `build` move to 3.14 with it so that every job
+  agrees on an interpreter. `requires-python` stays at `>=3.12` and the classifiers are
+  unchanged, so 3.12 and 3.13 remain supported -- they are simply no longer verified on
+  every push.
+- `dev` is the default branch and the branch pull requests target. `main` holds released
+  commits only, and `publish.yml` is the one thing that writes to it.
+- Releasing is a single workflow run. `publish.yml` takes the version as a required input
+  and, in order, fast-forwards `main` onto `dev`, tags that commit, cuts the GitHub
+  Release with notes taken from this file, and uploads to PyPI over Trusted Publishing.
+  The upload comes last because it is the only step of the four that cannot be taken back.
+  Four checks run against `dev` before any of them move: `stripboard.__version__` has to
+  equal the input exactly, no `v<version>` tag may already exist, the version has to be
+  newer than every tag that does, and this file has to carry the matching section. A
+  release that forgets the version bump fails in front of the upload rather than spending
+  a version number on PyPI.
+
 ## [0.2.0] - 2026-09-04
 
 ### Added
