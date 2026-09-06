@@ -65,6 +65,7 @@ class TestTerminalShroud:
 
 @pytest.mark.parametrize(("name", "build", "expected"), [
     ("resist", lambda b: b.resist(18, "R", "330", l=8), [(0, 1, 0, 7)]),
+    ("stepstick", lambda b: b.stepstick(2, "C"), [(1, 0, 5, 7)]),
     ("big_button", lambda b: b.big_button(13, "L"), [(1, -1, 4, 3)]),
     ("terminal", lambda b: b.terminal(3, "C", 2), [(-1, 0, 1, 1)]),
 ])
@@ -73,3 +74,21 @@ def test_keepouts_reach_the_router(wide_board, name, build, expected):
     _, instances, _ = wide_board._build_problem()
     inst = next(i for i in instances if i.id == comp.id)
     assert [(r.x0, r.y0, r.x1, r.y1) for r in inst.type.keepouts] == expected
+
+
+class TestStepStickBody:
+    """A driver module sits in a socket, so nothing may land under it but copper."""
+
+    def test_the_body_covers_the_columns_between_the_pin_rows(self, wide_board):
+        d = wide_board.stepstick(2, "C")
+        assert d.keepouts == ((1, 0, 5, 7),)      # columns 3..7, rows C..J
+
+    def test_the_body_follows_the_module_when_the_solver_flips_it(self, wide_board):
+        """A flipped module's pins move; its body has to move with them."""
+        d = wide_board.stepstick(2, "C", locked=False)
+        _, instances, _ = wide_board._build_problem()
+        inst = next(i for i in instances if i.id == d.id).moved((12, 12), True)
+        xs = {p[0] for p in inst.world_pins().values()}
+        body = inst.world_keepouts()[0]
+        assert (body.x0, body.x1) == (min(xs) + 1, max(xs) - 1)
+        assert (body.y0, body.y1) == (5, 12)

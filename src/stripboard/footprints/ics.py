@@ -89,7 +89,13 @@ class IcsMixin(_Base):
 
     def sip(self, x, y, l, name="", upside_down=False, pins=None, flip=False,
             mod=1, width=1, label_scale=1.0, locked=True, ref=None):
-        """Draw a SIP footprint and return a :class:`Component` handle for autorouting."""
+        """Draw a SIP footprint and return a :class:`Component` handle for autorouting.
+
+        A single column of ``l`` holes down column ``x`` from row ``y``. A ``pins`` list
+        names them from the top hole downwards, or from the bottom hole upwards when
+        ``upside_down``; without one they are numbered ``'1'`` downwards from the top.
+        ``upside_down`` changes which name lands on which hole, never where a hole is.
+        ``flip`` puts the labels to the left of the column instead of the right."""
         ry = self.row(y)
         kwargs = dict(upside_down=upside_down, pins=pins, flip=flip, mod=mod, width=width,
                       label_scale=label_scale)
@@ -231,7 +237,14 @@ class IcsMixin(_Base):
     def dip(self, x, y, w, h, name="", upside_down=False, pins=None,
             labels_inside=True, label_offset=0, label_scale=0.78, mod=1,
             skip_pins=None, locked=True, ref=None):
-        """Draw a DIP footprint and return a :class:`Component` handle for autorouting."""
+        """Draw a DIP footprint and return a :class:`Component` handle for autorouting.
+
+        Two columns of ``h`` holes: the left at column ``x``, the right at ``x + w``. A
+        ``pins`` list is consumed in the package's own pin order -- down the left column
+        from the top (physical pins 1..h), then back up the right column (pins
+        h+1..2h) -- and without one the holes take those numbers as their names.
+        ``upside_down`` rotates the labelling 180 degrees; it never moves a hole.
+        ``skip_pins`` takes physical pin numbers and drops those holes."""
         ry = self.row(y)
         kwargs = dict(name=name, upside_down=upside_down, pins=pins, labels_inside=labels_inside,
                       label_offset=label_offset, label_scale=label_scale,

@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from ..cost import cost_resolved
+from ..diagnose import conflict_reason, row_conflicts
 from ..geometry import Point
 from ..model import Board, ComponentInstance, Routing, Strip, Weights
 from ..netlist import ResolvedNet, ResolvedNetlist, internal_tie_pairs, pin_world_positions
@@ -64,6 +65,14 @@ def route_nets(
     internal = internal_tie_pairs(instances)
     congestion = NegotiatedCongestion()
 
+    # Nets the placement itself has made impossible: no ordering, column or detour row
+    # can route them, so they take a precise reason and are never searched for.
+    blocked: dict[str, str] = {}
+    for net in resolved.nets:
+        conflicts = row_conflicts(net, pin_pos, resolved.pin_to_net)
+        if conflicts:
+            blocked[net.id] = conflict_reason(conflicts)
+
     # Hardest nets first.
     order = sorted(resolved.nets, key=lambda n: _difficulty(n, pin_pos), reverse=True)
 
@@ -75,6 +84,10 @@ def route_nets(
         routing = Routing()
         unrouted: dict[str, str] = {}
         for net in order:
+            if net.id in blocked:
+                unrouted[net.id] = blocked[net.id]
+                congestion.penalize(_region_points(net, pin_pos))
+                continue
             obstacles = build_obstacles(instances, routing, resolved.pin_to_net, net.id)
             res = route_net(
                 board, net, pin_pos, internal, obstacles, weights=w, congestion=congestion

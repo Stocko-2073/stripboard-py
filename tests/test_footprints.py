@@ -28,6 +28,11 @@ FOOTPRINTS = {
                         pins=["LRC", "BCLK", "DIN", "GAIN", "SD", "GND", "VIN"]),
         {"VIN": (0, 0), "GND": (0, 1), "SD": (0, 2), "GAIN": (0, 3),
          "DIN": (0, 4), "BCLK": (0, 5), "LRC": (0, 6)}),
+    "stepstick": (lambda b: b.stepstick(2, "C"),
+                  {"EN": (0, 0), "MS1": (0, 1), "MS2": (0, 2), "MS3": (0, 3),
+                   "RST": (0, 4), "SLP": (0, 5), "STEP": (0, 6), "DIR": (0, 7),
+                   "VM": (6, 0), "GND1": (6, 1), "2B": (6, 2), "2A": (6, 3),
+                   "1A": (6, 4), "1B": (6, 5), "VDD": (6, 6), "GND2": (6, 7)}),
     "dip": (lambda b: b.dip(3, "C", 4, 4, "U1",
                             pins=["1", "2", "3", "4", "5", "6", "7", "8"]),
             {"1": (0, 0), "2": (0, 1), "3": (0, 2), "4": (0, 3),
@@ -55,7 +60,7 @@ FOOTPRINTS = {
 INSTANCE_IDS = {
     "cap": "C", "resist": "R", "led": "LED", "diode": "D", "sip": "A",
     "sip_upside_down": "AMP", "dip": "U1", "dip_upside_down": "MIC", "xiao": "XIAO",
-    "rp2040": "RP2040", "big_button": "BTN", "terminal": "TERM",
+    "rp2040": "RP2040", "big_button": "BTN", "terminal": "TERM", "stepstick": "DRV",
 }
 
 
@@ -116,3 +121,29 @@ def test_net_rejects_raw_tuples(wide_board):
     c = wide_board.cap(17, "D")
     with pytest.raises(TypeError, match="expect pin references"):
         wide_board.net("n1", c.pin("1"), (3, 4))
+
+
+class TestStepStickVariants:
+    """Same sixteen holes either way -- only which name lands on which hole changes."""
+
+    def test_both_variants_use_the_same_holes(self, wide_board):
+        a = wide_board.stepstick(2, "C", variant="a4988")
+        t = wide_board.stepstick(12, "C", variant="tmc2209")
+        assert sorted(local_pins(a).values()) == sorted(local_pins(t).values())
+
+    def test_the_power_column_differs_only_in_the_logic_supply(self, wide_board):
+        a = local_pins(wide_board.stepstick(2, "C", variant="a4988"))
+        t = local_pins(wide_board.stepstick(12, "C", variant="tmc2209"))
+        assert a["VDD"] == t["VIO"]
+        for name in ("EN", "MS1", "MS2", "STEP", "DIR", "1A", "1B", "2A", "2B",
+                     "GND1", "GND2", "VM"):
+            assert a[name] == t[name], name
+
+    def test_pins_can_be_named_outright(self, wide_board):
+        d = wide_board.stepstick(2, "C", pins=[str(i) for i in range(1, 17)])
+        assert local_pins(d)["1"] == (0, 0)
+        assert local_pins(d)["16"] == (6, 0)
+
+    def test_an_unknown_variant_names_the_ones_that_exist(self, wide_board):
+        with pytest.raises(KeyError, match="a4988"):
+            wide_board.stepstick(2, "C", variant="drv8825")

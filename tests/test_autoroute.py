@@ -9,7 +9,12 @@ views, so the FRONT and BACK sheets would disagree about where a component goes.
 
 from __future__ import annotations
 
-from stripboard import StripBoard
+import warnings
+
+import pytest
+
+from stripboard import StripBoard, StripboardWarning, UnroutableNetWarning
+from tests.helpers import local_pins
 
 
 def small_board():
@@ -183,3 +188,180 @@ def test_the_bundled_router_needs_no_path_setup():
     import stripboard.router as router
     assert small_board()._ensure_router() is router
     assert callable(router.route)
+
+
+# ---- hand-placed links the solver honours ---------------------------------------------
+
+def test_link_pins_sit_at_the_two_soldered_holes():
+    sb = small_board()
+    ln = sb.link(4, "C", "H")
+    assert local_pins(ln) == {"1": (0, 0), "2": (0, 5)}
+    assert ln.origin == (4, 3)
+    assert ln.locked is True
+
+
+def test_link_reserves_the_holes_it_arcs_over():
+    """A wire's span is a keep-out, so nothing else is routed through it."""
+    assert small_board().link(4, "C", "H").keepouts == ((0, 1, 0, 4),)
+
+
+def test_a_link_between_adjacent_rows_reserves_nothing():
+    assert small_board().link(4, "C", "D").keepouts == ()
+
+
+def test_link_accepts_its_rows_in_either_order():
+    sb = small_board()
+    down, up = sb.link(4, "C", "H"), sb.link(6, "H", "C")
+    assert local_pins(down) == local_pins(up)
+    assert down.keepouts == up.keepouts
+    assert up.origin == (6, 3)
+
+
+def test_link_ends_and_span_reach_the_router():
+    """The solver must see the wire, or it will route a jumper straight through it."""
+    sb = small_board()
+    ln = sb.link(4, "C", "H")
+    _, instances, _ = sb._build_problem()
+    inst = next(i for i in instances if i.id == ln.id)
+    assert {p.local_id: p.offset for p in inst.type.pins} == {"1": (0, 0), "2": (0, 5)}
+    assert [(r.x0, r.y0, r.x1, r.y1) for r in inst.type.keepouts] == [(0, 1, 0, 4)]
+
+
+def test_links_are_numbered_like_any_other_part():
+    sb = small_board()
+    assert [sb.link(4, "C", "H").id, sb.link(6, "C", "H").id] == ["LINK", "LINK2"]
+
+
+def test_a_link_can_carry_a_net_and_the_board_still_validates():
+    """The point of registering a link: hand and auto routing on one board."""
+    sb = small_board()
+    a = sb.sip(2, "B", 3, "A", pins=["1", "2", "3"])
+    b = sb.sip(10, "B", 3, "B", pins=["1", "2", "3"])
+    ln = sb.link(6, "F", "J")
+    sb.net("n1", a.pin("1"), ln.pin("1"))
+    sb.net("n2", b.pin("1"), ln.pin("2"))
+    result = sb.autoroute(seed=0)
+    assert result.status.value == "feasible"
+    assert result.validation.ok, result.validation.summary()
+
+
+def test_autorouted_jumpers_avoid_a_links_span():
+    sb = small_board()
+    a = sb.sip(2, "B", 3, "A", pins=["1", "2", "3"])
+    b = sb.sip(10, "B", 3, "B", pins=["1", "2", "3"])
+    sb.link(6, "C", "K")
+    sb.net("n1", a.pin("1"), b.pin("1"))
+    result = sb.autoroute(seed=0)
+    assert result.validation.ok, result.validation.summary()
+    reserved = {(6, y) for y in range(4, 11)} | {(6, 3), (6, 11)}
+    assert all((j.x, j.ya) not in reserved and (j.x, j.yb) not in reserved
+               for j in result.routing.all_jumpers())
+
+
+# ---- a net the geometry cannot route --------------------------------------------------
+
+def trapped_net_board():
+    """A net whose two pins straddle a foreign pin on one row.
+
+    Row C's strip has to reach both of the net's pins, so it would have to cover the
+    pin between them. No ordering, jumper column or detour row can avoid that.
+    """
+    sb = small_board()
+    a = sb.sip(2, "C", 1, "A", pins=["1"])
+    b = sb.sip(10, "C", 1, "B", pins=["1"])
+    sb.sip(6, "C", 1, "X", pins=["1"])
+    sb.net("n1", a.pin("1"), b.pin("1"))
+    return sb
+
+
+def test_an_unroutable_net_warns_and_says_what_is_in_the_way():
+    with pytest.warns(UnroutableNetWarning) as caught:
+        result = trapped_net_board().autoroute(seed=0)
+    assert result.status.value == "partial"
+    message = str(caught[0].message)
+    assert "'n1'" in message
+    assert "X.1 at (6,3)" in message
+
+
+def test_an_unroutable_net_can_be_made_a_build_failure():
+    """Escalating the warning is how a board file refuses to ship a half-wired board."""
+    sb = trapped_net_board()
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", StripboardWarning)
+        with pytest.raises(UnroutableNetWarning):
+            sb.autoroute(seed=0)
+
+
+def test_a_fully_routed_board_stays_quiet():
+    sb = small_board()
+    two_sips_and_a_resistor(sb, locked=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", StripboardWarning)
+        assert sb.autoroute(seed=0).status.value == "feasible"
+
+
+def test_the_warning_is_attributed_to_the_calling_board_file():
+    with pytest.warns(UnroutableNetWarning) as caught:
+        trapped_net_board().autoroute(seed=0)
+    assert caught[0].filename == __file__
+
+
+# ---- the build-sheet report -----------------------------------------------------------
+
+def solved_board():
+    sb = small_board()
+    two_sips_and_a_resistor(sb, locked=True)
+    sb.autoroute(seed=0)
+    return sb
+
+
+def test_the_default_report_stays_a_summary(capsys):
+    solved_board().route_report()
+    out = capsys.readouterr().out
+    assert "status=feasible" in out
+    assert "wire:" not in out
+    assert "cuts under a part body" not in out
+
+
+def test_verbose_lists_every_jumper_with_its_length(capsys):
+    sb = solved_board()
+    sb.route_report(verbose=True)
+    out = capsys.readouterr().out
+    wire = sum(j.vlength() for j in sb.last_result.routing.all_jumpers())
+    assert f"{wire} holes end to end" in out
+    for net_id, jumpers in sb.last_result.routing.jumpers.items():
+        assert net_id in out
+        for j in jumpers:
+            assert f"{j.x} {sb.row_name(j.ya)}-{sb.row_name(j.yb)} ({j.vlength()})" in out
+
+
+def test_verbose_counts_the_cuts_buried_under_a_part(capsys):
+    sb = solved_board()
+    sb.route_report(verbose=True)
+    out = capsys.readouterr().out
+    buried = sb.cuts_under_bodies()
+    assert f"cuts under a part body: {len(buried)} of {sb.last_result.cost.num_cuts}" in out
+
+
+def test_buried_cuts_are_the_ones_that_land_on_a_part_body():
+    """They have to be made before the part goes on, so they drive build order."""
+    sb = StripBoard(page_width=40, page_height=40)
+    sb.begin_board(20, "P", show_strips=True, at=(0, 0), show_traces=True, title="P")
+    d = sb.stepstick(3, "C", "DRV")
+    h = sb.sip(16, "C", 1, "H", pins=["a"])
+    sb.net("VM", d.pin("VM"), h.pin("a"))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", StripboardWarning)
+        sb.autoroute(seed=0)
+    buried = sb.cuts_under_bodies()
+    body = {p for r in sb._placed_instances(sb.last_result)
+            for rect in r.world_keepouts() for p in rect.points()}
+    assert set(buried) <= body
+    assert set(buried) == sb.last_result.physical_cuts & body
+
+
+def test_the_report_is_silent_without_a_solve_however_verbose(capsys):
+    sb = small_board()
+    sb.route_report(verbose=True)
+    assert capsys.readouterr().out == ""
+    assert sb.cuts_under_bodies() == []

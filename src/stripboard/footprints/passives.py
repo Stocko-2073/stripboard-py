@@ -174,7 +174,9 @@ class PassivesMixin(_Base):
     def resist(self, x, y, val='', upside_down=False, l=1, label_scale=1.0, locked=True, ref=None):
         """Draw a resistor (pins '1'/'2') and return a :class:`Component` handle.
 
-        The body occupies the column between the two pins, so the interior cells are a
+        The two leads sit ``l`` rows apart in column ``x``: pin ``'1'`` is the top hole
+        and pin ``'2'`` the bottom, and ``upside_down`` swaps the two names without moving
+        either hole. The body occupies the column between the pins, so those cells are a
         keep-out -- other jumpers may not arc through the resistor (local rect, empty when
         the pins are adjacent). ``label_scale`` vertically scales the value label (< 1
         shortens it to fit a busy board, > 1 stretches it taller)."""

@@ -21,8 +21,10 @@ So **two pins on the same row are already connected**, with no wire and no effor
 of the design work is deciding where that is wrong and breaking it:
 
 ```python
-sb.cut(7, 'F')                  # sever row F between columns 6 and 7
+sb.cut(7, 'F')                  # drill out hole (7, F), splitting row F's track
+sb.cut(7.5, 'F')                # or sever the track between columns 7 and 8
 sb.jumper(3, 'B', 3, 'F')       # a wire on the component side, bridging rows B and F
+sb.link(3, 'B', 'F')            # the same wire, but the autorouter routes around it
 ```
 
 A `cut` removes copper. A `jumper` adds a wire across strips. Between them you can wire
@@ -35,6 +37,12 @@ sb.trace(3, 'B')                # flood-fill the net reachable from hole (3, B)
 `trace` walks the strip outwards from that hole, stops at cuts, hops along jumpers, and
 shades every hole it reaches. If a net comes out the wrong shape, you have found your
 mistake before soldering anything.
+
+One consequence is worth knowing before you place anything. The autorouter cuts by
+drilling the hole out, so a cut costs a whole hole and two strips on one row need an empty
+hole between them. Two *different* nets therefore cannot have pins in adjacent holes on
+the same row — leave a hole between them. `autoroute()` says so by name when it happens,
+and `sb.explain(net)` points at the pin in the way.
 
 ## Component handles
 
@@ -51,6 +59,13 @@ u1.pins['VCC']         # (9, 6)          -- where that hole is
 Pin geometry comes from the same code that drew the part, so the autorouter and the PDF
 can never disagree about where a leg goes. Numeric pins accept ints: `c1.pin(2)` is
 `c1.pin('2')`.
+
+A `pins` list is consumed in the package's own pin order. For a `dip` that is down the
+left column from the top, then back up the right column — so in the 555 above `GND` is
+pin 1 at the top left and `VCC` is pin 8 at the top right. For a `sip` it is simply top
+to bottom, and for a two-lead part like `resist` or `cap`, pin `'1'` is the top hole.
+`upside_down` rotates the labelling 180 degrees on any of them: it changes which name
+lands on which hole, never where the holes are.
 
 Some parts also declare **keep-outs** — the board area their body covers, which the
 router must not run a jumper through:
