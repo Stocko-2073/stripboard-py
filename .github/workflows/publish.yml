@@ -1,31 +1,104 @@
 name: Publish
 
-# Publishing is driven by GitHub Releases: cut a release and this uploads that commit's
-# artifacts to PyPI. Authentication is Trusted Publishing (OIDC) -- PyPI verifies the
-# workflow's identity directly, so there is no API token anywhere in this repository.
+# Releasing is one gesture: run this workflow with the version being released. It checks
+# that `dev` really carries that version, runs the full suite, fast-forwards `main` onto
+# `dev`, tags it, cuts the GitHub Release from `CHANGELOG.md`, and only then uploads to
+# PyPI. Authentication is Trusted Publishing (OIDC) -- PyPI verifies the workflow's
+# identity directly, so there is no API token anywhere in this repository.
+#
+# `main` therefore only ever holds a released, green commit, and PyPI -- the one step that
+# cannot be undone -- happens last, after everything that can still be corrected.
 on:
-  release:
-    types: [published]
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release, with no leading v (for example 0.3.0)"
+        required: true
+        type: string
 
 permissions: {}
 
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
 jobs:
-  build:
-    name: Build and check the distributions
+  verify:
+    name: Check the version and the tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Releases come from `dev` whatever ref the run was started against, and the
+          # full history is needed to see which versions are already tagged.
+          ref: dev
+          fetch-depth: 0
 
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: "3.14"
 
       - name: Install
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
-          pip install build twine
+          pip install build packaging twine
+
+      - name: Confirm the version was bumped
+        # PyPI will not accept a version twice, so a wrong number here is unrecoverable.
+        # Everything that can be checked before the upload is checked here.
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import re
+          import subprocess
+          import sys
+
+          from packaging.version import InvalidVersion, Version
+
+          import stripboard
+
+          requested = os.environ["VERSION"].strip()
+          if requested.startswith("v"):
+              sys.exit("give the version with no leading 'v', for example 0.3.0")
+          try:
+              version = Version(requested)
+          except InvalidVersion:
+              sys.exit(f"{requested!r} is not a version")
+
+          if requested != stripboard.__version__:
+              sys.exit(
+                  f"dev carries {stripboard.__version__}, not {requested}. Bump "
+                  "__version__ in src/stripboard/__init__.py and merge that into dev."
+              )
+
+          tags = subprocess.run(
+              ["git", "tag", "--list", "v*"],
+              capture_output=True, text=True, check=True,
+          ).stdout.split()
+          if f"v{version}" in tags:
+              sys.exit(f"v{version} is already tagged, so it is already released")
+
+          released = []
+          for tag in tags:
+              try:
+                  released.append(Version(tag[1:]))
+              except InvalidVersion:
+                  continue
+          if released and version <= max(released):
+              sys.exit(f"{version} does not follow {max(released)}, the latest release")
+
+          heading = re.compile(rf"^## \[{re.escape(str(version))}\] - \d{{4}}-\d\d-\d\d$", re.M)
+          if not heading.search(pathlib.Path("CHANGELOG.md").read_text()):
+              sys.exit(f"CHANGELOG.md has no '## [{version}] - <date>' section")
+
+          print(f"releasing {version}")
+          PY
 
       - name: Run the full test suite
         # A release should not be publishable if the tests do not pass on it.
@@ -42,9 +115,62 @@ jobs:
           name: dist
           path: dist/
 
+  release:
+    name: Merge into main and cut the release
+    needs: verify
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: dev
+          fetch-depth: 0
+
+      - name: Fast-forward main onto dev
+        # An ordinary push, so git refuses anything that is not a fast-forward. If this
+        # fails, main carries a commit dev does not, and that wants a human.
+        run: git push origin HEAD:main
+
+      - name: Tag the release
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          git tag "v$VERSION"
+          git push origin "v$VERSION"
+
+      - name: Take the release notes from the changelog
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import re
+
+          version = os.environ["VERSION"]
+          text = pathlib.Path("CHANGELOG.md").read_text()
+          start = re.search(rf"^## \[{re.escape(version)}\] - .*$", text, re.M)
+          body = text[start.end():]
+          nxt = re.search(r"^## \[", body, re.M)
+          pathlib.Path("release-notes.md").write_text(
+              (body[:nxt.start()] if nxt else body).strip() + "\n"
+          )
+          PY
+
+      - name: Cut the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          gh release create "v$VERSION" \
+            --target main \
+            --title "v$VERSION" \
+            --notes-file release-notes.md
+
   publish:
     name: Upload to PyPI
-    needs: build
+    needs: release
     runs-on: ubuntu-latest
     environment:
       name: pypi

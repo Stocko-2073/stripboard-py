@@ -9,6 +9,11 @@ pip install -e ".[dev]"
 Python 3.12 or newer. There are no runtime dependencies and there should not be any —
 if you find yourself wanting one, please open an issue first.
 
+## Branches
+
+`dev` is the default branch: branch off it, and open your pull request against it. `main`
+holds released commits only, and the publish workflow is the one thing that writes there.
+
 ## Project layout
 
 ```
