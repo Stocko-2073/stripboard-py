@@ -1,8 +1,8 @@
 # stripboard
 
 Design **stripboard** (protoboard / veroboard) circuit layouts in Python, and render them
-to a PDF you can solder from — plus a silkscreen label, laser g-code, an SVG, and a
-3D-printable carrier.
+to a PDF you can solder from — plus a silkscreen label, laser g-code, an SVG, a
+3D-printable label, and a 3D-printable carrier.
 
 Stripboard is prototyping board with parallel copper strips running across one face. You
 place components on the grid, cut the strips where two nets must not share one, and add
@@ -64,6 +64,7 @@ Edit `draw(sb)`, re-run, look at the PDF. When the layout is right, flip
 | *(always)* | `<name>.pdf` | The board. `designing=True` gives a one-page DESIGN preview; `designing=False` gives the FRONT / BACK / DESIGN build sheet. |
 | `label=True` | `<name>-label.pdf` | Black-and-white silkscreen, for toner transfer or a laser. |
 | `gcode=True` | `<name>.nc` | GRBL laser g-code that etches that silkscreen onto the board top. |
+| `scad=True` | `<name>.scad` | An OpenSCAD label for a two-colour 3D print: a plate the size of the board with the silkscreen standing on it at nozzle width, and the lead holes drilled through. Generating it needs nothing installed. |
 | `carrier=True` | `<name>.stl` | A 3D-printable carrier that the finished board slots into. Needs OpenSCAD. |
 
 The three views on the build sheet are the three ways you actually look at the board:

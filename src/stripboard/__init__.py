@@ -3,7 +3,7 @@
 Write a ``draw(sb)`` function that places components on the hole grid and either routes
 them by hand (``jumper``/``link``/``cut``/``trace``) or declares a netlist and calls
 ``autoroute()``; then hand it to :func:`project`, which renders the board PDF and any
-label, laser g-code or carrier you ask for::
+label, laser g-code, 3D-printed label or carrier you ask for::
 
     from stripboard import project
 
@@ -38,7 +38,7 @@ from .geometry import parse_row
 from .project import project
 
 # The single source of truth for the version; pyproject.toml reads it from here.
-__version__ = "0.3.1"
+__version__ = "0.4.0"
 
 __all__ = [
     "StripBoard",

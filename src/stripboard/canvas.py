@@ -1,8 +1,8 @@
 """Drawing primitives and the graphics state.
 
 The bottom layer: everything above this composes rectangles, lines, ellipses and arcs
-out of these, and every one of them also feeds the stroke capture that the g-code and
-SVG exporters consume. The transform methods emit PDF ``cm`` operators and update the
+out of these, and every one of them also feeds the stroke capture that the g-code, SVG
+and OpenSCAD exporters consume. The transform methods emit PDF ``cm`` operators and update the
 parallel capture CTM in lockstep -- see :mod:`stripboard.transform`.
 """
 
@@ -36,10 +36,29 @@ class CanvasMixin(_Base):
     def _cap_pt(self, x, y):
         return transform.apply(self._cap_ctm[-1], x, y)
 
+    def _cap_hole(self, x, y):
+        """Record a hole a lead passes through: a part pin, or a wire end.
+
+        Every footprint marks its pins with dot() and every wire end with jdot(), so this
+        is the complete set however the part was built -- and unlike a netlist it does not
+        care whether the builder registers a component. Recorded whatever the view chooses
+        to ink, because a lead occupies the hole either way.
+        """
+        if self._cap_on:
+            self._cap_holes.append(self._cap_pt(x, y))
+
     def _cap_add(self, pts):
-        """Record a stroked polyline (local-coord (x,y) pairs) into _cap_paths."""
+        """Record a stroked polyline (local-coord (x,y) pairs) into _cap_paths.
+
+        The width goes in beside it, resolved through the capture CTM: a caller sets the
+        width before the transforms that position the geometry, so the width that paints
+        is the one it set scaled by the matrix in effect here. Text is the case that makes
+        the difference -- a glyph sets one width and is then scaled to its point size.
+        """
         if self._cap_on and len(pts) >= 2:
             self._cap_paths.append([self._cap_pt(px, py) for px, py in pts])
+            self._cap_widths.append(
+                self._cap_width * transform.scale_factor(self._cap_ctm[-1]))
 
     def _rect(self,x,y,w,h,f='S'):
         self._out('%.2F %.2F m %.2F %.2F l %.2F %.2F l %.2F %.2F l %.2F %.2F l %s' %
@@ -122,6 +141,7 @@ class CanvasMixin(_Base):
 
     def dot(self, x, y, f='F'):
         y = self.row(y)
+        self._cap_hole(x, y)
         if self.show_components:
             self._ellipse(x,y,0.25,0.25,f)
         elif self.show_crosses:
@@ -215,4 +235,5 @@ class CanvasMixin(_Base):
         self._cap_op(transform.scaling(scale_x, scale_y))
 
     def line_width(self, w):
+        self._cap_width = w
         self._out('%.2F w' % (w))

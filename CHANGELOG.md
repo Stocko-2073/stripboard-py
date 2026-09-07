@@ -3,6 +3,38 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-09-07
+
+### Added
+- `sb.gen_scad()` and `project(scad=...)` write the LABEL silkscreen as an OpenSCAD model
+  for a two-colour 3D print: `label_base()` is a plate the size of the board and
+  `label_traces()` stands on it, every stroke redrawn round-capped at one nozzle width. A
+  `part` parameter in the emitted file selects one body at a time so each can be rendered
+  to its own STL, and every lead hole is drilled through both. Nothing needs to be
+  installed to generate it -- the file is written directly rather than through the
+  `openscad` binary, unlike `gen_carrier()` -- and every dimension lands in the file as a
+  named parameter, so a nozzle or a plate thickness can be changed without re-exporting.
+  Geometry is emitted as vector literals that a `for` loop in the file walks, because a
+  plain label runs to a few hundred segments and a crowded one to thousands.
+- The stroke capture records the width each path was painted at, in `_cap_widths` beside
+  `_cap_paths`. Width is resolved through the capture CTM rather than read back from the
+  value a caller passed, which is what PDF itself does: it resolves `w` in the user space
+  in force when the path is painted. So a glyph narrowed by `x_scale`, or a pin name set at
+  a footprint's `label_scale`, measures narrower than the same glyph at full size. This is
+  the distinction the 3D label needs -- a nozzle lays a bead about 0.4 mm wide, and the
+  0.127 mm hairline a black-and-white `jumper()` draws to stand for a wire is not something
+  it can lay down at all, so strokes under `min_stroke_mm` are dropped rather than
+  fattened. The count dropped is reported on the summary line and in the file's header.
+- The capture records the holes a lead passes through, in `_cap_holes`. These come from the
+  marks the footprints already draw -- `dot()` for a pin, `jdot()` for a wire end -- rather
+  than from the netlist, because 17 of the 39 part builders draw pins without registering a
+  component and a netlist misses every one of them: `header()` is among them, so a
+  netlist-sourced hole set left four holes out of the `examples/header_breakout.py` label.
+  Cuts are excluded, since a cut takes its hole with it and nothing is soldered through.
+- `transform.scale_factor()` measures the scale a matrix applies to a length, as the
+  geometric mean of its two axis scales. That is how PDF reduces a stroke width under an
+  anisotropic matrix, and it is what resolves a recorded width into board-grid units.
+
 ## [0.3.1] - 2026-09-06
 
 ### Changed

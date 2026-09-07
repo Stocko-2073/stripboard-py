@@ -26,6 +26,7 @@ __all__ = ["WiringMixin"]
 class WiringMixin(_Base):
     def jdot(self, x, y, f='F'):
         y = self.row(y)
+        self._cap_hole(x, y)
         if self.show_jumpers:
             self.white()
             self._ellipse(x,y,0.35,0.35,f)
