@@ -81,6 +81,30 @@ class TestOutputFiles:
                 gcode=dict(svg=True), report=False)
         assert sorted(p.name for p in in_tmp.iterdir()) == ["b.nc", "b.pdf", "b.svg"]
 
+    def test_scad_adds_a_scad_file_in_either_mode(self, in_tmp):
+        draw, _ = counting_draw()
+        project(draw, name="b", width=12, height="K", designing=True,
+                scad=True, report=False)
+        assert sorted(p.name for p in in_tmp.iterdir()) == ["b.pdf", "b.scad"]
+
+    def test_scad_accepts_a_filename(self, in_tmp):
+        draw, _ = counting_draw()
+        project(draw, name="b", width=12, height="K", designing=True,
+                scad="label3d.scad", report=False)
+        assert sorted(p.name for p in in_tmp.iterdir()) == ["b.pdf", "label3d.scad"]
+
+    def test_scad_options_reach_the_exporter(self, in_tmp):
+        draw, _ = counting_draw()
+        project(draw, name="b", width=12, height="K", designing=True,
+                scad=dict(nozzle_mm=0.6), report=False)
+        assert "nozzle  = 0.600;" in (in_tmp / "b.scad").read_text(encoding="utf-8")
+
+    def test_scad_and_gcode_together_write_both(self, in_tmp):
+        draw, _ = counting_draw()
+        project(draw, name="b", width=12, height="K", designing=True,
+                gcode=True, scad=True, report=False)
+        assert sorted(p.name for p in in_tmp.iterdir()) == ["b.nc", "b.pdf", "b.scad"]
+
     def test_everything_at_once(self, in_tmp):
         draw, _ = counting_draw()
         project(draw, name="b", width=12, height="K", designing=False,
@@ -113,6 +137,13 @@ class TestDrawInvocations:
         project(draw, name="b", width=12, height="K", designing=False,
                 label=True, gcode=True, report=False)
         assert len(calls) == 5
+
+    def test_scad_adds_a_capture_pass_of_its_own(self, in_tmp):
+        """The 3D label does not ride the g-code capture: it must work without it."""
+        draw, calls = counting_draw()
+        project(draw, name="b", width=12, height="K", designing=False,
+                label=True, gcode=True, scad=True, report=False)
+        assert len(calls) == 6
 
 
 class TestSizing:

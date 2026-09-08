@@ -20,6 +20,7 @@ from .autoroute import AutorouteMixin
 from .canvas import CanvasMixin
 from .connectivity import ConnectivityMixin
 from .export.generate import ExportMixin
+from .export.scad import ScadMixin
 from .font import VECTOR_CHARS
 from .footprints import FootprintsMixin
 from .geometry import parse_row
@@ -42,6 +43,7 @@ class StripBoard(
     NetlistMixin,
     AutorouteMixin,
     ExportMixin,
+    ScadMixin,
 ):
     """A board being drawn: geometry, components, wiring, and the PDF it renders to.
 
@@ -73,13 +75,21 @@ class StripBoard(
         # --- laser/g-code path capture (additive side-channel; off by default) ---
         # When _cap_on is True the geometry primitives ALSO record their stroked paths,
         # transformed by _cap_ctm (a CTM stack that mirrors the PDF transform operators),
-        # into _cap_paths. gen_gcode()/gen_svg() serialize that. PDF output is unaffected.
+        # into _cap_paths, with each path's stroke width in _cap_widths alongside it.
+        # gen_gcode()/gen_svg()/gen_scad() serialize that. PDF output is unaffected.
         # Set up before the base page transforms below (they call _scale/_flip_y/_translate,
         # which touch _cap_ctm); begin_board() resets _cap_ctm so those base ops drop out
         # and captured coordinates stay in board-grid (hole) units.
         self._cap_on = False
         self._cap_paths = []                                # list[list[(x, y)]], grid units
+        self._cap_widths = []                               # one width per path, grid units
+        self._cap_holes = []                                # lead holes, grid units
+        self._cap_ink = []                                  # painted shapes, in order
+        self._cap_outline = -1                              # index of the board outline
+        self._cap_page_only = False                         # holds page-only marks out
         self._cap_ctm = [transform.IDENTITY]                 # stack of affine (a,b,c,d,e,f)
+        self._cap_board = transform.IDENTITY                 # board frame, per begin_board
+        self._cap_width = .2                                 # tracks the last line_width()
 
         self.black_and_white = black_and_white
         self.page_width = page_width / scale
@@ -186,6 +196,13 @@ class StripBoard(
         if self.rotate:
             self._rotate(90)
         self._translate(-board_width/2, -board_height/2)
+        # The board's own frame in capture coordinates: what maps a hole (x, row(y)) to
+        # where the renderer drew it. gen_scad() needs it to register pin holes against
+        # the traces, which no bounding box can give it once anything is drawn off-board.
+        self._cap_board = self._cap_ctm[-1]
+        # The outline frames the board for a reader; a printed label is cut to that edge
+        # already, so gen_scad() drops it and needs to know which shape it was.
+        self._cap_outline = len(self._cap_ink)
         self.box(0, 0, board_width, board_height)
         letters = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ" * 10)
         for y in range(1, board_height):

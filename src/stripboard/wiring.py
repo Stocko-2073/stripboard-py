@@ -26,6 +26,8 @@ __all__ = ["WiringMixin"]
 class WiringMixin(_Base):
     def jdot(self, x, y, f='F'):
         y = self.row(y)
+        self._cap_hole(x, y)
+        self._cap_page_only = True
         if self.show_jumpers:
             self.white()
             self._ellipse(x,y,0.35,0.35,f)
@@ -39,6 +41,7 @@ class WiringMixin(_Base):
             self._ellipse(x,y,0.2,0.2,f)   
             self.black()
             self._ellipse(x,y,0.15,0.15,f)   
+        self._cap_page_only = False
 
     def drill(self, x, y):
         if not self.show_drills:

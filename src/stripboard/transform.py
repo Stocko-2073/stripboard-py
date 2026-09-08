@@ -9,14 +9,16 @@ operands of PDF's ``cm`` operator -- and maps a point as::
 These functions back two things at once. Board rendering emits ``cm`` operators into the
 PDF content stream, and *in parallel* keeps its own copy of the current transformation
 matrix so that stroked geometry can also be recorded in board-grid coordinates for the
-g-code and SVG exporters. Both halves compose matrices the same way, which is why the
-maths lives here rather than inside either one.
+exporters, along with the width each stroke was painted at. Both halves compose matrices
+the same way, which is why the maths lives here rather than inside either one.
 """
 
 from __future__ import annotations
 
-__all__ = ["IDENTITY", "Matrix", "compose", "apply", "translation", "rotation", "scaling",
-           "FLIP_X", "FLIP_Y"]
+import math
+
+__all__ = ["IDENTITY", "Matrix", "compose", "apply", "scale_factor", "translation",
+           "rotation", "scaling", "FLIP_X", "FLIP_Y"]
 
 Matrix = tuple[float, float, float, float, float, float]
 
@@ -47,6 +49,17 @@ def apply(m: Matrix, x: float, y: float) -> tuple[float, float]:
     """Map the point (x, y) through `m`."""
     a, b, c, d, e, f = m
     return (a * x + c * y + e, b * x + d * y + f)
+
+
+def scale_factor(m: Matrix) -> float:
+    """The uniform scale `m` applies, as the geometric mean of its two axis scales.
+
+    This is how a length carried in one space is measured in another -- a stroke width in
+    particular, which PDF resolves against the matrix in effect when the path is painted
+    rather than when the width was set, and reduces the same way when the two axes differ.
+    """
+    a, b, c, d, _e, _f = m
+    return math.sqrt(abs(a * d - b * c))
 
 
 def translation(dx: float, dy: float) -> Matrix:

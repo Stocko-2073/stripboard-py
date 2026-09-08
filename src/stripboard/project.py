@@ -2,12 +2,13 @@
 
 A board file is a ``draw(sb)`` function plus one ``project(...)`` call. Everything else --
 the design-preview-versus-build-sheet toggle, the FRONT/BACK/DESIGN triptych, the label
-PDF, the laser g-code, the carrier STL, the autoroute summary -- is scaffolding this
-module owns.
+PDF, the laser g-code, the OpenSCAD label, the carrier STL, the autoroute summary -- is
+scaffolding this module owns.
 
 The thing to know when writing a board file: ``draw`` is invoked **more than once**. Once
 for a design preview; three times for the triptych; again on a fresh black-and-white
-board for the label; again for the stroke capture that feeds the g-code. So ``draw``
+board for the label; again for the stroke capture that feeds the g-code, and again for
+the one that feeds the OpenSCAD label. So ``draw``
 should be a pure function of the board handed to it, and anything expensive inside it had
 better be cached -- which is exactly what the autoroute solve cache does.
 """
@@ -67,6 +68,28 @@ def _gcode_render(draw, name, width, height, gcode):
     if svg:
         sb.gen_svg(svg if isinstance(svg, str) else f'{name}.svg')
 
+def _scad_render(draw, name, width, height, scad):
+    """Render the LABEL view with stroke-capture on and write an OpenSCAD label (<name>.scad).
+
+    Mirrors :func:`_gcode_render` but serializes the capture as a two-colour 3D print rather
+    than as laser motion. `scad` is True, a filename str, or a dict; dict keys ``name``/
+    ``page``/``width``/``height``/``rotate`` control the render, while any remaining keys
+    (``nozzle_mm``/``min_stroke_mm``/``min_fill_mm``/``hole_mm``/``plate_mm``/``inlay_mm``/
+    ``facets``/``pitch_mm``) pass straight to :meth:`StripBoard.gen_scad`."""
+    opts = dict(scad) if isinstance(scad,
+                dict) else ({'name': scad} if isinstance(scad, str) else {})
+    out = opts.pop('name', f'{name}.scad')
+    page = opts.pop('page', (width + 14, _rows(height) + 2))
+    lw = opts.pop('width', width)
+    lh = opts.pop('height', height)
+    rotate = opts.pop('rotate', False)
+    sb = StripBoard(page_width=page[0], page_height=page[1], black_and_white=True)
+    sb._cap_on = True
+    sb.begin_view('LABEL', lw, lh, at=(0, 0), rotate=rotate)
+    draw(sb)
+    sb.end_board()
+    sb.gen_scad(out, **opts)
+
 def project(draw, *, name, width, height,
             designing=True,
             pitch=None,
@@ -78,6 +101,7 @@ def project(draw, *, name, width, height,
             label=False,
             carrier=False,
             gcode=False,
+            scad=False,
             builds=None,
             report=True):
     """One-call board driver: the whole per-project main block, encapsulated.
@@ -108,6 +132,9 @@ def project(draw, *, name, width, height,
       gcode:         True, a filename str, or a dict (``name``/``svg``/``power``/``feed``/
                      ``mirror``/``flip_y``/``frame``/...) -> render the LABEL silkscreen as
                      GRBL laser g-code (``<name>.nc``) for etching the board top.
+      scad:          True, a filename str, or a dict (``name``/``nozzle_mm``/``hole_mm``/
+                     ``plate_mm``/``inlay_mm``/...) -> render the LABEL silkscreen as an
+                     OpenSCAD label (``<name>.scad``) for a two-colour 3D print.
       report:        print the autoroute summary if the board declared nets (no-op otherwise).
 
     Returns the primary StripBoard (its ``.last_result`` holds the routing, if any)."""
@@ -141,6 +168,8 @@ def project(draw, *, name, width, height,
     # are still iterating in `designing=True`).
     if gcode:
         _gcode_render(draw, name, width, height, gcode)
+    if scad:
+        _scad_render(draw, name, width, height, scad)
 
     if report:
         sb.route_report()

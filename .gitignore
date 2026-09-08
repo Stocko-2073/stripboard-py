@@ -28,6 +28,8 @@ htmlcov/
 *.svg
 *.png
 !docs/**/*.png
+*.scad
+!src/stripboard/data/*.scad
 
 # macOS
 .DS_Store

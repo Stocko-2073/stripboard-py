@@ -2,8 +2,9 @@
 
 Rendering keeps two transformation stacks in step: the PDF's own (driven by `cm`
 operators in the content stream) and a private copy used to record stroked geometry in
-board-grid coordinates for the g-code and SVG exporters. If they drift, the PDF and the
-laser output disagree -- and nothing else would catch it.
+board-grid coordinates for the exporters. If they drift, the PDF and the laser output
+disagree -- and nothing else would catch it. The capture also resolves each stroke's
+width through that matrix, which is why the scale it carries has to be measurable.
 """
 
 from __future__ import annotations
@@ -81,6 +82,27 @@ def test_compose_is_associative():
     left = T.compose(T.compose(a, b), c)
     right = T.compose(a, T.compose(b, c))
     assert left == pytest.approx(right, abs=1e-12)
+
+
+def test_scale_factor_is_one_for_a_rigid_transform():
+    for m in (T.IDENTITY, T.translation(7, -3), T.rotation(0.6, 0.8)):
+        assert T.scale_factor(m) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_scale_factor_is_the_geometric_mean_of_the_axis_scales():
+    assert T.scale_factor(T.scaling(4, 9)) == pytest.approx(6.0, abs=1e-12)
+    assert T.scale_factor(T.scaling(0.6, 1.0)) == pytest.approx(math.sqrt(0.6), abs=1e-12)
+
+
+def test_scale_factor_ignores_a_reflection():
+    """A mirrored frame still strokes a line of the same width."""
+    assert T.scale_factor(T.FLIP_X) == pytest.approx(1.0, abs=1e-12)
+    assert T.scale_factor(T.FLIP_Y) == pytest.approx(1.0, abs=1e-12)
+
+
+def test_scale_factor_multiplies_under_composition():
+    a, b = T.scaling(2, 2), T.scaling(3, 3)
+    assert T.scale_factor(T.compose(a, b)) == pytest.approx(6.0, abs=1e-12)
 
 
 # ---- the capture CTM stack on a live board -------------------------------------------

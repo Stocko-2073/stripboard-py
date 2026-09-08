@@ -10,7 +10,7 @@ This class declares that shared surface. Mixins inherit it **under
 executes -- so the checker can resolve cross-mixin access while the runtime MRO is
 exactly what it was before.
 
-It doubles as documentation: 38 attributes and 65 methods
+It doubles as documentation: 45 attributes and 67 methods
 is the coupling, written down. Shrinking that list is how this would become a set of
 collaborating objects rather than mixins.
 
@@ -32,9 +32,16 @@ class BoardState:
 
     # ---- state ----------------------------------------------------------------------
     _VIEW_PRESETS: dict[str, dict[str, bool]]
+    _cap_board: Matrix
     _cap_ctm: list[Matrix]
+    _cap_holes: list[tuple[float, float]]
+    _cap_page_only: bool
+    _cap_ink: list[Any]
     _cap_on: bool
+    _cap_outline: int
     _cap_paths: list[list[tuple[float, float]]]
+    _cap_width: float
+    _cap_widths: list[float]
     _net_colors: dict[str, Any]
     _ref_counters: dict[str, int]
     _route_cache: dict[Any, Any]
@@ -76,6 +83,8 @@ class BoardState:
     def _build_problem(self) -> Any: ...
     def _cap_add(self, pts) -> Any: ...
     def _cap_bbox(self, kind) -> Any: ...
+    def _cap_hole(self, x, y) -> Any: ...
+    def _cap_ink_add(self, kind, pts) -> Any: ...
     def _cap_op(self, m_op) -> Any: ...
     def _cap_pt(self, x, y) -> Any: ...
     def _check_jumper_hole(self, x, y) -> Any: ...

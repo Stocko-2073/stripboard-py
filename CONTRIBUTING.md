@@ -31,7 +31,7 @@ src/stripboard/
   connectivity.py   trace(): flood-fill a net to check it
   netlist.py        net() and connect()
   autoroute.py      driving the router and drawing its result
-  export/           PDF, g-code, SVG, carrier STL
+  export/           PDF, g-code, SVG, OpenSCAD label, carrier STL
 
   font.py           the vector stroke font
   palette.py        colour tables
