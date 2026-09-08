@@ -1,13 +1,19 @@
-"""The OpenSCAD board label: the LABEL silkscreen as a two-colour 3D print.
+"""The OpenSCAD board label, as a two-colour 3D print.
 
-Where the g-code exporter hands the silkscreen to a laser, this hands it to a printer. A
-laser draws a line of no width at any scale; a nozzle lays a bead, so the artwork is
-redrawn at one bead per stroke and strokes too thin to be a bead are dropped rather than
-fattened. The result is two solids -- a plate and the artwork standing on it -- because a
-slicer needs one body per filament.
+Where the g-code exporter hands the silkscreen to a laser, this hands it to a printer, and
+a printer needs the artwork as *area* rather than as centrelines. So this exporter consumes
+the ink capture -- every shape the renderer painted, in the order it painted them, with its
+colour -- rather than the stroke capture the laser uses.
 
-Geometry comes from the stroke capture, and specifically from the widths recorded beside
-it: nothing else distinguishes lettering from the hairline that stands for a wire.
+Colour is what makes that necessary. The renderer draws a glyph by filling a box in the
+opposite colour and stroking the glyph over it, so white is how it erases: a point is inked
+when the last shape covering it was black. Reproducing that gives the filled bodies and the
+knocked-out lettering the printed label has, and it is why each black shape is emitted less
+the white shapes painted after it.
+
+The two bodies share one surface. The artwork is inlaid into the plate rather than standing
+on it -- the plate carries a pocket the traces drop into, both flush at the top -- because
+that is what a multi-material printer wants: one solid per filament, meeting on a plane.
 """
 
 from __future__ import annotations
@@ -26,85 +32,108 @@ else:
 
 __all__ = ["ScadMixin"]
 
-# The static half of the emitted file. Segments are built by a `for` over the path vector
-# rather than emitted one `hull()` at a time: a plain label runs to a few hundred segments
-# and a crowded one to thousands, and a loop keeps the file readable at any size. The
-# boolean work stays 2D under a single `linear_extrude`, which is the cheap arrangement,
-# and the pins are subtracted from both bodies so a lead passes through the whole stack.
+# The static half of the emitted file. A stroke becomes a run of round-capped segments,
+# which is what matches the renderer's own round caps and joins; a fill is its polygon.
+# Shapes are indexed so the ink structure below can reference them without repeating
+# coordinates, and `for` is an implicit union so one linear_extrude covers the lot.
 _MODULES = """\
-module label_pins() {
+module shape(i) {
+    s = shapes[i];
+    if (s[0] == 0)
+        polygon(s[1]);
+    else
+        for (k = [0 : len(s[1]) - 2])
+            hull() {
+                translate(s[1][k])     circle(d = nozzle, $fn = facets);
+                translate(s[1][k + 1]) circle(d = nozzle, $fn = facets);
+            }
+}
+
+module lead_holes() {
     for (h = holes)
         translate(h) circle(d = hole_d, $fn = facets);
 }
 
-module label_base() {
-    linear_extrude(height = base_h)
-        difference() {
-            square([label_w, label_h]);
-            label_pins();
-        }
-}
-
-module label_traces() {
-    translate([0, 0, base_h])
-        linear_extrude(height = trace_h)
+module inlay(extra) {
+    translate([0, 0, plate_h - inlay_h])
+        linear_extrude(height = inlay_h + extra)
             difference() {
                 intersection() {
-                    union() {
-                        for (p = paths)
-                            for (i = [0 : len(p) - 2])
-                                hull() {
-                                    translate(p[i])     circle(d = nozzle, $fn = facets);
-                                    translate(p[i + 1]) circle(d = nozzle, $fn = facets);
-                                }
-                    }
-                    // Nothing may overhang the plate: it would print into thin air.
-                    square([label_w, label_h]);
+                    ink();
+                    square(plate);
                 }
-                label_pins();
+                lead_holes();
             }
 }
 
-if (part == "all" || part == "base")   label_base();
+module label_plate() {
+    difference() {
+        linear_extrude(height = plate_h)
+            difference() {
+                square(plate);
+                lead_holes();
+            }
+        inlay(1);
+    }
+}
+
+module label_traces() {
+    inlay(0);
+}
+
+if (part == "all" || part == "plate")  label_plate();
 if (part == "all" || part == "traces") label_traces();
 """
 
 
 class ScadMixin(_Base):
-    def gen_scad(self, name, *, pitch_mm=2.54, nozzle_mm=0.4, min_stroke_mm=0.35,
-                 hole_mm=1.2, base_mm=0.6, trace_mm=0.4, facets=10):
-        """Write the captured LABEL strokes as an OpenSCAD board label to `name`.
+    def gen_scad(self, name, *, pitch_mm=2.54, nozzle_mm=0.4, min_stroke_mm=0.0,
+                 min_fill_mm=0.3, hole_mm=1.2, plate_mm=1.0, inlay_mm=0.4, facets=10):
+        """Write the captured LABEL artwork as an OpenSCAD board label to `name`.
 
-        Two modules for a two-filament print: ``label_base()`` is a plate the size of the
-        board and ``label_traces()`` stands on it, every stroke traced round-capped at
-        `nozzle_mm`. A `part` parameter in the emitted file selects one body at a time, so
-        each can be rendered to its own STL.
+        Two bodies for a two-filament print, meeting flush at the top face:
+        ``label_plate()`` is a plate the size of the board with the artwork cut out of it
+        as a pocket `inlay_mm` deep, and ``label_traces()`` is the artwork that drops into
+        that pocket. A `part` parameter in the emitted file selects one at a time, so each
+        can be rendered to its own STL.
 
-        Strokes narrower than `min_stroke_mm` are dropped, which is what keeps the hairline
-        a black-and-white ``jumper()`` draws to stand for a wire from printing as artwork.
-        The width consulted is the one PDF strokes with, resolved through the transform
-        that positioned the geometry, so text shrunk by ``x_scale`` or a footprint's
-        ``label_scale`` measures narrower than the same glyph at full size and drops out
-        first: at the default cutoff a pin name set at 0.78 scale does not print. Lower
-        `min_stroke_mm` to keep it -- 0.25 keeps every glyph the shipped examples draw
-        while still dropping the hairlines. The count that went is on the summary line and
-        in the file's own header, so it is never silent.
+        The artwork is what the label view *paints*, so filled component bodies and
+        knocked-out lettering come through as they appear on the page, not merely as
+        outlines. Every stroke is redrawn `nozzle_mm` wide -- a printer lays a bead of one
+        width whatever the page used -- so jumper wires and lettering come out the same
+        weight. `min_stroke_mm` and `min_fill_mm` drop anything too small to print, which
+        is how the hole stipple stays out of the model; both count in millimetres, and the
+        counts dropped are on the summary line and in the file's own header.
 
-        Every part pin and every wire end is punched through both bodies at `hole_mm` so
-        the leads still pass. Those come from the marks the footprints draw -- ``dot()``
-        for a pin, ``jdot()`` for a wire end -- rather than from the netlist, because
-        better than half the part builders draw pins without registering a component and
-        a netlist would miss them. Cuts are not punched: a cut takes its hole with it and
-        no lead goes through. Neither is ``drill()``, which marks its hole with neither,
-        so its ring prints as artwork.
+        `plate_mm` is the board's thickness and `inlay_mm` how deep the artwork sits below
+        its top face; both reach the emitted file as named parameters, so they can be tried
+        at other values without exporting again. A lead has to clear this label *and* the
+        protoboard beneath it, so thinner is better, and `inlay_mm` equal to `plate_mm`
+        carries the artwork the whole way through -- the thinnest a two-colour label can be.
 
-        The plate is the board outline, ``(board_width + 1) x (board_height + 1)`` holes
-        at `pitch_mm`, taken from the board's own size and frame rather than from the
-        stroke bounding box -- a title drawn off the board must not move the plate out
-        from under the holes. Consumes the capture of a single view; see
-        :func:`_scad_render`.
+        Every part pin and wire end is drilled through both bodies at `hole_mm` so the
+        leads still pass. Those come from the marks the footprints draw -- ``dot()`` for a
+        pin, ``jdot()`` for a wire end -- rather than from the netlist, because better than
+        half the part builders draw pins without registering a component. Cuts are not
+        drilled: a cut takes its hole with it and no lead goes through. The pad the
+        footprint draws around a pin is left out of the artwork: it is a ring very nearly
+        the width of the hole itself, so it asks for a bead thinner than a nozzle can lay,
+        and the hole alone reads the same.
+
+        The plate is the board outline, ``(board_width + 1) x (board_height + 1)`` holes at
+        `pitch_mm`, taken from the board's own size and frame rather than from the painted
+        extent -- artwork drawn off the board must not move the plate out from under the
+        holes, and is clipped to it instead. The frame the renderer drew around the board is
+        left out: a printed label is already cut to that edge. Consumes the capture of a
+        single view; see :func:`_scad_render`.
         """
-        self._cap_bbox("gen_scad")  # for its error alone, when nothing was captured
+        if not self._cap_ink:
+            raise ValueError("gen_scad: no captured geometry -- "
+                             "render a view with _cap_on=True first (see _scad_render).")
+        if not 0 < inlay_mm <= plate_mm:
+            raise ValueError(f"gen_scad: inlay_mm ({inlay_mm}) must be more than zero and "
+                             f"at most plate_mm ({plate_mm}); the artwork is inlaid into "
+                             "the plate, and equal values inlay it the whole way through.")
 
         frame = self._cap_board
         corners = [transform.apply(frame, x, y)
@@ -114,59 +143,122 @@ class ScadMixin(_Base):
         xs = [x for x, _ in corners]
         ys = [y for _, y in corners]
         x0, y1 = min(xs), max(ys)
-        # The outline stroke is centred on the board edge, so half a bead of it falls
-        # outside. The plate carries that half bead as a margin, which is what keeps the
-        # border printable: clipped to the board exactly, it would come out half width.
-        margin = nozzle_mm / 2
-        label_w = (max(xs) - x0) * pitch_mm + nozzle_mm
-        label_h = (y1 - min(ys)) * pitch_mm + nozzle_mm
+        plate_w = (max(xs) - x0) * pitch_mm
+        plate_h = (y1 - min(ys)) * pitch_mm
 
         def to_mm(pt):
             # Grid rows run top->down and OpenSCAD Y runs bottom->up, so Y inverts.
-            return ((pt[0] - x0) * pitch_mm + margin, (y1 - pt[1]) * pitch_mm + margin)
+            return ((pt[0] - x0) * pitch_mm, (y1 - pt[1]) * pitch_mm)
 
-        kept = [p for p, w in zip(self._cap_paths, self._cap_widths, strict=True)
-                if w * pitch_mm >= min_stroke_mm]
-        skipped = len(self._cap_paths) - len(kept)
+        # ---- what is painted, in paint order -------------------------------------
+        ops = []
+        thin_strokes = thin_fills = 0
+        for i, (kind, white, width, pts) in enumerate(self._cap_ink):
+            if i == self._cap_outline:
+                continue
+            if kind == 'S' and width * pitch_mm < min_stroke_mm:
+                thin_strokes += 1
+                continue
+            mm = [to_mm(pt) for pt in pts]
+            span_x = max(x for x, _ in mm) - min(x for x, _ in mm)
+            span_y = max(y for _, y in mm) - min(y for _, y in mm)
+            if kind == 'F' and span_x < min_fill_mm and span_y < min_fill_mm:
+                thin_fills += 1
+                continue
+            ops.append((kind, white, mm, (min(x for x, _ in mm), min(y for _, y in mm),
+                                          max(x for x, _ in mm), max(y for _, y in mm))))
 
-        # Dedup at micron scale: a wire end lands on a pin, and a link marks both.
-        hole_mm_pts = sorted({(round(x, 3), round(y, 3))
-                              for x, y in map(to_mm, self._cap_holes)})
+        # ---- resolve the paint order into one ink region -------------------------
+        # A point is inked when the last shape over it was black, so a black shape stands
+        # less the white shapes painted after it. Only the ones whose extents meet it can
+        # take anything away, which keeps each difference to its own neighbourhood.
+        shapes: list[tuple[int, list[tuple[float, float]]]] = []
 
+        def shape_id(op):
+            kind, _white, mm, _box = op
+            pts = mm[:-1] if kind == 'F' and len(mm) > 2 and mm[0] == mm[-1] else mm
+            shapes.append((0 if kind == 'F' else 1, pts))
+            return len(shapes) - 1
+
+        def meets(a, b):
+            return not (a[2] <= b[0] or b[2] <= a[0] or a[3] <= b[1] or b[3] <= a[1])
+
+        groups = []
+        for pos, op in enumerate(ops):
+            if op[1]:
+                continue
+            over = [later for later in ops[pos + 1:] if later[1] and meets(op[3], later[3])]
+            groups.append((shape_id(op), [shape_id(w) for w in over]))
+
+        if not groups:
+            raise ValueError("gen_scad: nothing left to print -- every painted shape was "
+                             "dropped as too small, or erased by one painted over it.")
+
+        holes = sorted({(round(x, 3), round(y, 3))
+                        for x, y in map(to_mm, self._cap_holes)})
+
+        # ---- serialize -----------------------------------------------------------
         def vec(pt):
-            x, y = pt
-            return f"[{x:.3f}, {y:.3f}]"
+            return f"[{pt[0]:.3f}, {pt[1]:.3f}]"
 
-        segments = sum(len(p) - 1 for p in kept)
+        def poly(pts):
+            return "[" + ", ".join(vec(p) for p in pts) + "]"
+
+        dropped = []
+        if thin_strokes:
+            dropped.append(f"{thin_strokes} strokes under {min_stroke_mm} mm")
+        if thin_fills:
+            dropped.append(f"{thin_fills} fills under {min_fill_mm} mm")
+        painted = sum(1 for g in groups if not g[1])
+        carved = len(groups) - painted
+
         lines = [
             "// OpenSCAD board label generated by stripboard.",
-            f"// {len(kept)} traces in {segments} segments, {len(hole_mm_pts)} pin holes, "
-            f"{label_w:.1f} x {label_h:.1f} mm"
-            + (f"; {skipped} strokes thinner than {min_stroke_mm} mm skipped."
-               if skipped else "."),
-            "// Two bodies for a two-filament print. Render one at a time with",
-            f'//   openscad -D \'part="base"\' -o base.stl {Path(name).name}',
+            f"// {len(groups)} painted shapes ({carved} with lettering knocked out of "
+            f"them), {len(holes)} lead holes, {plate_w:.1f} x {plate_h:.1f} mm."
+            + (f" Dropped as unprintable: {', '.join(dropped)}." if dropped else ""),
+            f"// {plate_mm:.2f} mm thick with the artwork {inlay_mm:.2f} mm deep in it. Two"
+            " bodies meeting flush at the top",
+            "//   face, one per filament. Render one at a time:",
+            f'//   openscad -D \'part="plate"\' -o plate.stl {Path(name).name}',
             "",
-            'part    = "all";     // "all", "base" or "traces"',
-            f"nozzle  = {nozzle_mm:.3f};     // trace width (mm): one nozzle bead",
-            f"hole_d  = {hole_mm:.3f};     // pin hole diameter (mm)",
-            f"base_h  = {base_mm:.3f};     // plate thickness (mm)",
-            f"trace_h = {trace_mm:.3f};     // trace height above the plate (mm)",
-            f"label_w = {label_w:.3f};    // plate width (mm)",
-            f"label_h = {label_h:.3f};    // plate height (mm)",
+            'part    = "all";     // "all", "plate" or "traces"',
+            f"nozzle  = {nozzle_mm:.3f};     // stroke width (mm): one nozzle bead",
+            f"hole_d  = {hole_mm:.3f};     // lead hole diameter (mm)",
+            f"plate_h = {plate_mm:.3f};     // board thickness (mm) -- the lead has to clear",
+            "                     //   this plus the protoboard under it, so thinner is",
+            "                     //   better; a couple of layers is the practical floor",
+            f"inlay_h = {inlay_mm:.3f};     // trace height (mm): how deep the artwork sits",
+            "                     //   below the top face. Set it equal to plate_h to",
+            "                     //   carry the artwork the whole way through, which is",
+            "                     //   the thinnest a two-colour label can be",
             f"facets  = {facets};        // facets per round cap and per hole",
             "",
-            "holes = [",
+            f"plate = [{plate_w:.3f}, {plate_h:.3f}];",
+            "",
+            "// [is_stroke, points]",
+            "shapes = [",
         ]
-        lines += [f"    {vec(pt)}," for pt in hole_mm_pts]
-        lines += ["];", "", "paths = ["]
-        lines += [f"    [{', '.join(vec(to_mm(pt)) for pt in p)}]," for p in kept]
+        lines += [f"    [{kind}, {poly(pts)}]," for kind, pts in shapes]
+        lines += ["];", "", "holes = ["]
+        lines += [f"    {vec(pt)}," for pt in holes]
         lines += ["];", ""]
+
+        lines += ["// Black shapes, each less the white ones painted over it.",
+                  "module ink() {", "    union() {"]
+        for black, over in groups:
+            if over:
+                subs = " ".join(f"shape({w});" for w in over)
+                lines.append(f"        difference() {{ shape({black}); {subs} }}")
+            else:
+                lines.append(f"        shape({black});")
+        lines += ["    }", "}", ""]
         lines += _MODULES.splitlines()
 
         target = Path(name)
         if target.parent != Path():
             target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("\n".join(lines) + "\n", encoding="utf-8")
-        print(f"wrote {name}: {len(kept)} traces, {len(hole_mm_pts)} holes, "
-              f"{label_w:.1f} x {label_h:.1f} mm, {skipped} thin strokes skipped")
+        print(f"wrote {name}: {len(groups)} shapes, {len(holes)} holes, "
+              f"{plate_w:.1f} x {plate_h:.1f} mm"
+              + (f", dropped {', '.join(dropped)}" if dropped else ""))

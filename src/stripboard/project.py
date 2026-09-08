@@ -74,8 +74,8 @@ def _scad_render(draw, name, width, height, scad):
     Mirrors :func:`_gcode_render` but serializes the capture as a two-colour 3D print rather
     than as laser motion. `scad` is True, a filename str, or a dict; dict keys ``name``/
     ``page``/``width``/``height``/``rotate`` control the render, while any remaining keys
-    (``nozzle_mm``/``min_stroke_mm``/``hole_mm``/``base_mm``/``trace_mm``/``facets``/
-    ``pitch_mm``) pass straight to :meth:`StripBoard.gen_scad`."""
+    (``nozzle_mm``/``min_stroke_mm``/``min_fill_mm``/``hole_mm``/``plate_mm``/``inlay_mm``/
+    ``facets``/``pitch_mm``) pass straight to :meth:`StripBoard.gen_scad`."""
     opts = dict(scad) if isinstance(scad,
                 dict) else ({'name': scad} if isinstance(scad, str) else {})
     out = opts.pop('name', f'{name}.scad')
@@ -132,9 +132,9 @@ def project(draw, *, name, width, height,
       gcode:         True, a filename str, or a dict (``name``/``svg``/``power``/``feed``/
                      ``mirror``/``flip_y``/``frame``/...) -> render the LABEL silkscreen as
                      GRBL laser g-code (``<name>.nc``) for etching the board top.
-      scad:          True, a filename str, or a dict (``name``/``nozzle_mm``/``min_stroke_mm``/
-                     ``hole_mm``/``base_mm``/``trace_mm``/...) -> render the LABEL silkscreen
-                     as an OpenSCAD label (``<name>.scad``) for a two-colour 3D print.
+      scad:          True, a filename str, or a dict (``name``/``nozzle_mm``/``hole_mm``/
+                     ``plate_mm``/``inlay_mm``/...) -> render the LABEL silkscreen as an
+                     OpenSCAD label (``<name>.scad``) for a two-colour 3D print.
       report:        print the autoroute summary if the board declared nets (no-op otherwise).
 
     Returns the primary StripBoard (its ``.last_result`` holds the routing, if any)."""

@@ -90,10 +90,16 @@ class TextMixin(_Base):
         last_color = self.last_color
         if self.black_and_white:
             if self.last_color == (255,255,255):
+                # Inverted lettering: the box is the ink the glyph is knocked out of.
                 self.black()
+                page_only = False
             else:
+                # Plain lettering: the box only blanks whatever lies under the glyph.
                 self.white()
+                page_only = True
+            self._cap_page_only = page_only
             self.box(-0.5,-0.5,1.0,1.0,'F')
+            self._cap_page_only = False
             self.color(last_color)
         for poly in v:
             line = []

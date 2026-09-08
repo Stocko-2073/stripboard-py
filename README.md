@@ -64,7 +64,7 @@ Edit `draw(sb)`, re-run, look at the PDF. When the layout is right, flip
 | *(always)* | `<name>.pdf` | The board. `designing=True` gives a one-page DESIGN preview; `designing=False` gives the FRONT / BACK / DESIGN build sheet. |
 | `label=True` | `<name>-label.pdf` | Black-and-white silkscreen, for toner transfer or a laser. |
 | `gcode=True` | `<name>.nc` | GRBL laser g-code that etches that silkscreen onto the board top. |
-| `scad=True` | `<name>.scad` | An OpenSCAD label for a two-colour 3D print: a plate the size of the board with the silkscreen standing on it at nozzle width, and the lead holes drilled through. Generating it needs nothing installed. |
+| `scad=True` | `<name>.scad` | An OpenSCAD label for a two-colour 3D print: a plate the size of the board with the silkscreen inlaid flush into its top face, and the lead holes drilled through both. One body per filament. Generating it needs nothing installed. |
 | `carrier=True` | `<name>.stl` | A 3D-printable carrier that the finished board slots into. Needs OpenSCAD. |
 
 The three views on the build sheet are the three ways you actually look at the board:

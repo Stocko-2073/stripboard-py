@@ -6,25 +6,41 @@ All notable changes to this project are documented here. This project adheres to
 ## [0.4.0] - 2026-09-07
 
 ### Added
-- `sb.gen_scad()` and `project(scad=...)` write the LABEL silkscreen as an OpenSCAD model
-  for a two-colour 3D print: `label_base()` is a plate the size of the board and
-  `label_traces()` stands on it, every stroke redrawn round-capped at one nozzle width. A
-  `part` parameter in the emitted file selects one body at a time so each can be rendered
-  to its own STL, and every lead hole is drilled through both. Nothing needs to be
-  installed to generate it -- the file is written directly rather than through the
-  `openscad` binary, unlike `gen_carrier()` -- and every dimension lands in the file as a
-  named parameter, so a nozzle or a plate thickness can be changed without re-exporting.
-  Geometry is emitted as vector literals that a `for` loop in the file walks, because a
-  plain label runs to a few hundred segments and a crowded one to thousands.
-- The stroke capture records the width each path was painted at, in `_cap_widths` beside
-  `_cap_paths`. Width is resolved through the capture CTM rather than read back from the
-  value a caller passed, which is what PDF itself does: it resolves `w` in the user space
-  in force when the path is painted. So a glyph narrowed by `x_scale`, or a pin name set at
-  a footprint's `label_scale`, measures narrower than the same glyph at full size. This is
-  the distinction the 3D label needs -- a nozzle lays a bead about 0.4 mm wide, and the
-  0.127 mm hairline a black-and-white `jumper()` draws to stand for a wire is not something
-  it can lay down at all, so strokes under `min_stroke_mm` are dropped rather than
-  fattened. The count dropped is reported on the summary line and in the file's header.
+- `sb.gen_scad()` and `project(scad=...)` write the label as an OpenSCAD model for a
+  two-colour 3D print. `label_plate()` is a plate the size of the board with the artwork
+  cut into its top face as a pocket, and `label_traces()` is the artwork that drops into
+  that pocket; both end flush at the same plane, which is what a multi-material slicer
+  wants -- one solid per filament, meeting on a surface. A `part` parameter in the emitted
+  file selects one at a time so each can be rendered to its own STL, and every lead hole is
+  drilled through both. Nothing needs to be installed to generate it: the file is written
+  directly rather than through the `openscad` binary, unlike `gen_carrier()`. The frame the
+  renderer draws around the board is left out, because a printed label is cut to that edge
+  already.
+- The capture records the shapes the renderer paints, in the order it paints them and with
+  the colour it paints them in, in `_cap_ink`. A printer needs the artwork as area rather
+  than as centrelines -- a component body is filled, and lettering is knocked out of it --
+  and colour is what carries that, because white is how this renderer erases: it draws a
+  glyph by filling a box in the opposite colour and stroking the glyph over it. So a point
+  is inked when the last shape covering it was black, and `gen_scad` resolves that by
+  emitting each black shape less the white shapes painted over it. Filled bodies and
+  inverted lettering come through as they appear on the page.
+- Two marks the renderer draws for the page rather than for the artwork are held out of
+  the model by `_cap_page_only`. A pad is a ring of ink around a hole very nearly its own
+  width, so it asks for a bead thinner than a nozzle can lay and the drilled hole reads
+  the same without it. The white box behind plain lettering is there to blank whatever
+  lies under the glyph, which a plate has no need of -- and taken as material it cut every
+  outline the lettering crossed down to a sliver. The black box behind *inverted*
+  lettering is kept, because that one is the ink the glyph is knocked out of, as is the
+  white fill `shroud()` notches its body with.
+- Each captured stroke carries the width it was painted at, in `_cap_widths`. Width is
+  resolved through the capture CTM rather than read back from the value a caller passed,
+  which is what PDF does: it resolves `w` in the user space in force when the path is
+  painted. So a glyph narrowed by `x_scale`, or a pin name set at a footprint's
+  `label_scale`, measures narrower than the same glyph at full size. Strokes reach the
+  model at one nozzle width whatever the page used, so a jumper wire drawn as a 0.127 mm
+  hairline prints as a bead like everything else, and `min_stroke_mm` and `min_fill_mm`
+  drop what is too small to print at all -- which is how the 0.05 mm hole stipple stays
+  out of a model that would otherwise carry 884 of them.
 - The capture records the holes a lead passes through, in `_cap_holes`. These come from the
   marks the footprints already draw -- `dot()` for a pin, `jdot()` for a wire end -- rather
   than from the netlist, because 17 of the 39 part builders draw pins without registering a

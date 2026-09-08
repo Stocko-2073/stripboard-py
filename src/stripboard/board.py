@@ -84,6 +84,9 @@ class StripBoard(
         self._cap_paths = []                                # list[list[(x, y)]], grid units
         self._cap_widths = []                               # one width per path, grid units
         self._cap_holes = []                                # lead holes, grid units
+        self._cap_ink = []                                  # painted shapes, in order
+        self._cap_outline = -1                              # index of the board outline
+        self._cap_page_only = False                         # holds page-only marks out
         self._cap_ctm = [transform.IDENTITY]                 # stack of affine (a,b,c,d,e,f)
         self._cap_board = transform.IDENTITY                 # board frame, per begin_board
         self._cap_width = .2                                 # tracks the last line_width()
@@ -197,6 +200,9 @@ class StripBoard(
         # where the renderer drew it. gen_scad() needs it to register pin holes against
         # the traces, which no bounding box can give it once anything is drawn off-board.
         self._cap_board = self._cap_ctm[-1]
+        # The outline frames the board for a reader; a printed label is cut to that edge
+        # already, so gen_scad() drops it and needs to know which shape it was.
+        self._cap_outline = len(self._cap_ink)
         self.box(0, 0, board_width, board_height)
         letters = list("ABCDEFGHIJKLMNOPQRSTUVWXYZ" * 10)
         for y in range(1, board_height):
