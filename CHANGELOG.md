@@ -51,10 +51,8 @@ All notable changes to this project are documented here. This project adheres to
   geometric mean of its two axis scales. That is how PDF reduces a stroke width under an
   anisotropic matrix, and it is what resolves a recorded width into board-grid units.
 
-## [0.3.1] - 2026-09-06
-
 ### Changed
-- The release no longer runs the test suite. `publish.yml` ran `pytest -m ''` on a commit
+- The release does not run the test suite. `publish.yml` ran `pytest -m ''` on a commit
   that had already been through CI twice, on the pull request and again on the push to
   `dev`, and that one step was nearly the whole release: of a five and a half minute run,
   the merge took eight seconds and the upload fifteen. `dev` is a protected branch instead
