@@ -113,7 +113,7 @@ jobs:
       - name: Check the metadata renders
         run: twine check --strict dist/*
 
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -182,7 +182,7 @@ jobs:
       # The only permission the upload needs: mint an OIDC token for PyPI to verify.
       id-token: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           name: dist
           path: dist/
