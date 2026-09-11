@@ -1,8 +1,11 @@
 name: CI
 
+# The pull request is the gate. `dev` requires these checks on a branch that is already
+# up to date with it, so the tree that lands is the tree that was tested and a run on the
+# push afterwards answers a question already answered. `main` is only ever a fast-forward
+# of `dev`, written by publish.yml after the upload to PyPI, where a run could gate
+# nothing.
 on:
-  push:
-    branches: [main, dev]
   pull_request:
   workflow_dispatch:
 
@@ -15,17 +18,51 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The scope check below needs the base branch to diff against.
+          fetch-depth: 0
+
+      - name: Decide whether this change can reach the tests
+        id: scope
+        # Prose cannot change what the suite does, and the suite is much the slowest
+        # check. The job itself always runs and always reports, so the required check on
+        # `dev` is satisfied either way -- only the work below is held back.
+        run: |
+          # Anything unrecognised counts as code, so a surprise runs the suite rather
+          # than skipping it.
+          code=true
+          if [ -n "${{ github.base_ref }}" ]; then
+            changed=$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+            if [ -n "$changed" ]; then
+              code=false
+              while IFS= read -r f; do
+                case "$f" in
+                  CHANGELOG.md|README.md|CONTRIBUTING.md|TODO.md|LICENSE) ;;
+                  docs/*) ;;
+                  *) code=true ;;
+                esac
+              done <<< "$changed"
+            fi
+          fi
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          if [ "$code" = false ]; then
+            echo "Only prose changed; the suite cannot be affected by it."
+            printf '%s\n' "$changed"
+          fi
 
       - uses: actions/setup-python@v6
+        if: steps.scope.outputs.code == 'true'
         with:
           python-version: "3.14"
 
       - name: Install
+        if: steps.scope.outputs.code == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
       - name: Confirm there are no runtime dependencies
+        if: steps.scope.outputs.code == 'true'
         # The package must import with nothing installed but the dev tools. A stray
         # third-party import would otherwise go unnoticed until someone installs it.
         run: |
@@ -39,9 +76,11 @@ jobs:
           python -c "import stripboard, stripboard.router; print(stripboard.__version__)"
 
       - name: Run the fast suite, with coverage
+        if: steps.scope.outputs.code == 'true'
         run: pytest --cov=stripboard --cov-report=term-missing --cov-fail-under=80
 
       - name: Run the solver tests
+        if: steps.scope.outputs.code == 'true'
         # Deliberately uninstrumented. Coverage instrumentation more than doubles the
         # runtime of these four place->route tests (5s -> 7min for the whole suite) and
         # they add about one percentage point, so measuring them is not worth the wall
@@ -49,6 +88,7 @@ jobs:
         run: pytest -m slow
 
       - name: Render the examples
+        if: steps.scope.outputs.code == 'true'
         # An end-to-end check that the packaged library still produces real output.
         run: |
           for f in examples/*.py; do
