@@ -161,6 +161,7 @@ class StripBoard(
         self.show_coordinates = show_coordinates
 
         self.connections = []
+        self._cuts: list[tuple[float, int]] = []
         self.trace_origins = []
         self.nc_points = []
         self.trace_color = 0

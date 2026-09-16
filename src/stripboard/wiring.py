@@ -58,12 +58,13 @@ class WiringMixin(_Base):
         emits. A half-column ``x`` such as ``7.5`` instead severs the track between
         columns 7 and 8 and leaves both holes usable. Both are drawn in red, and both
         stop a :meth:`trace`."""
-        if not self.show_crosses:
-            return
         y = self.row(y)
         if y2 is None:
             y2 = y
         y2 = self.row(y2)
+        self._cuts.extend((x, yy) for yy in range(int(y), int(y2) + 1))
+        if not self.show_crosses:
+            return
         xx = x
         self.pdf.set_draw_color(255, 0, 0)
         r = 0.3

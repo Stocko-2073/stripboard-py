@@ -54,6 +54,7 @@ class BoardState:
     board_width: int
     colors: list[tuple[int, int, int]]
     connections: list[Any]
+    _cuts: list[tuple[float, int]]
     flip_x: bool
     last_color: tuple[int, int, int]
     last_result: Any

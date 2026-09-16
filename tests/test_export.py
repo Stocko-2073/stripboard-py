@@ -15,6 +15,29 @@ from stripboard import StripBoard
 PITCH_MM = 2.54
 
 
+@pytest.mark.parametrize("view", ["DESIGN", "BACK", "FRONT"])
+def test_pdf_cut_list_expands_ranges_and_alphabetic_rows(tmp_path, view):
+    sb = StripBoard()
+    sb.begin_view(view, 10, 28)
+    sb.cut(3.0, "A", "C")
+    sb.cut(7.5, 26, 28)
+    sb.jumper(1, "D", 1, "E")
+    sb.end_board()
+    sb.gen(tmp_path / "board.v2.pdf", cuts=True)
+    assert (tmp_path / "board.v2_cuts.txt").read_text() == "A3,B3,C3,Z7.5,AA7.5,AB7.5\n"
+
+
+def test_pdf_cut_list_resets_for_new_board_and_handles_no_cuts(tmp_path):
+    sb = StripBoard()
+    sb.begin_view("DESIGN", 10, "D")
+    sb.cut(3, "A")
+    sb.end_board()
+    sb.begin_view("DESIGN", 10, "D")
+    sb.end_board()
+    sb.gen(tmp_path / "empty.pdf", cuts=True)
+    assert (tmp_path / "empty_cuts.txt").read_text() == "\n"
+
+
 def captured(*, width=6, height="D", text="HI", **board_kwargs):
     """A LABEL render with stroke capture on -- what `project(gcode=...)` builds."""
     sb = StripBoard(page_width=12, page_height=10, black_and_white=True, **board_kwargs)

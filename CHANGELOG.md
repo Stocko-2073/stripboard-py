@@ -3,6 +3,13 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-09-16
+
+### Added
+- `project(cuts=True)` and `sb.gen(..., cuts=True)` optionally write a
+  `<name>_cuts.txt` file containing one comma-separated line of cut locations with
+  alphabetic row names.
+
 ## [0.4.0] - 2026-09-07
 
 ### Added

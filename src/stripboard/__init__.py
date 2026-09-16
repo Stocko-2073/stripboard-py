@@ -38,7 +38,7 @@ from .geometry import parse_row
 from .project import project
 
 # The single source of truth for the version; pyproject.toml reads it from here.
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 
 __all__ = [
     "StripBoard",

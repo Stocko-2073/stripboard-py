@@ -33,6 +33,22 @@ def counting_draw():
 
 
 class TestOutputFiles:
+    @pytest.mark.parametrize("designing", [True, False])
+    @pytest.mark.parametrize("rotate", [True, False])
+    def test_cut_list_uses_board_coordinates_once(self, in_tmp, designing, rotate):
+        def draw(sb):
+            sb.cut(15, "A")
+            sb.cut(9, 4)
+            sb.cut(22, "X")
+            sb.cut(15, "T")
+            sb.cut(15, "A")
+
+        project(draw, name="nested/board", width=24, height="Z",
+                designing=designing, rotate=rotate, cuts=True,
+                builds=[{"y": 0}, {"y": 35}], report=False)
+        assert (in_tmp / "nested/board_cuts.txt").read_text() == "A15,D9,X22,T15\n"
+        assert (in_tmp / "nested/board.pdf").exists()
+
     def test_design_mode_writes_one_pdf(self, in_tmp):
         draw, _ = counting_draw()
         project(draw, name="b", width=12, height="K", designing=True, report=False)

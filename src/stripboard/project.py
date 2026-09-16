@@ -102,6 +102,7 @@ def project(draw, *, name, width, height,
             carrier=False,
             gcode=False,
             scad=False,
+            cuts=False,
             builds=None,
             report=True):
     """One-call board driver: the whole per-project main block, encapsulated.
@@ -136,6 +137,8 @@ def project(draw, *, name, width, height,
                      ``plate_mm``/``inlay_mm``/...) -> render the LABEL silkscreen as an
                      OpenSCAD label (``<name>.scad``) for a two-colour 3D print.
       report:        print the autoroute summary if the board declared nets (no-op otherwise).
+      cuts:          True -> also write ``<name>_cuts.txt`` in either mode: one line of
+                     comma-separated cuts with alphabetic rows, e.g. ``A15,D9,X22,T15``.
 
     Returns the primary StripBoard (its ``.last_result`` holds the routing, if any)."""
     if pitch is None:
@@ -150,14 +153,14 @@ def project(draw, *, name, width, height,
         sb.begin_view('DESIGN', width, height, at=(0, 0), rotate=rotate)
         draw(sb)
         sb.end_board()
-        sb.gen(f'{name}.pdf')
+        sb.gen(f'{name}.pdf', cuts=cuts)
     else:
         sb = StripBoard(page_width=build_page[0], page_height=build_page[1])
         for spec in (builds or [{}]):
             sb.triptych(draw, width, height, pitch=pitch,
                         y=spec.get('y', 0), y0=y0, tight=spec.get('tight', False),
                         front_numbers=front_numbers, rotate=rotate)
-        sb.gen(f'{name}.pdf')
+        sb.gen(f'{name}.pdf', cuts=cuts)
         if label:
             _label_render(draw, name, width, height, label)
         if carrier:
