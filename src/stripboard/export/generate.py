@@ -24,9 +24,26 @@ __all__ = ["ExportMixin"]
 
 
 class ExportMixin(_Base):
-    def gen(self, pdf_name):
-        """Write the board PDF to `pdf_name`, creating parent directories as needed."""
-        return self.pdf.output(pdf_name)
+    def gen(self, pdf_name, *, cuts=False):
+        """Write the PDF, optionally with a ``<stem>_cuts.txt`` cut list.
+
+        The list describes the last board drawn, in original board coordinates,
+        with unique cuts in declaration order. Rows use A..Z, AA..AZ, etc.;
+        between-hole cuts retain their fractional columns (for example, A7.5).
+        """
+        result = self.pdf.output(pdf_name)
+        if cuts:
+            target = Path(pdf_name)
+            entries = []
+            for x, y in dict.fromkeys(self._cuts):
+                row = ""
+                while y > 0:
+                    y, letter = divmod(y - 1, 26)
+                    row = chr(65 + letter) + row
+                entries.append(f"{row}{x:g}")
+            target.with_name(f"{target.stem}_cuts.txt").write_text(
+                ",".join(entries) + "\n", encoding="utf-8")
+        return result
 
     def gen_carrier(self, stl_name, board_thickness=1.7, nozzle=0.7, rotate=False,
                     runner=None):
