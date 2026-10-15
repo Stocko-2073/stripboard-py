@@ -3,11 +3,17 @@
 These are local rects `(x0, y0, x1, y1)` relative to the part origin. They reach the
 solver as `ComponentType` keep-outs, so an error here shows up as a router that runs
 jumpers underneath a component body.
+
+They can be shaded on the page too, as a design aid, and that shading has to stop at the
+page. On the label it prints as a solid block of filament over whatever lettering it
+covers, and the laser etches its outline onto the board.
 """
 
 from __future__ import annotations
 
 import pytest
+
+from stripboard import StripBoard, project
 
 
 @pytest.fixture
@@ -92,3 +98,56 @@ class TestStepStickBody:
         body = inst.world_keepouts()[0]
         assert (body.x0, body.x1) == (min(xs) + 1, max(xs) - 1)
         assert (body.y0, body.y1) == (5, 12)
+
+
+# ---- shading ------------------------------------------------------------------------
+
+def shaded(show, *, view="LABEL", black_and_white=True):
+    """A board with one keep-out on it, rendered with the capture on."""
+    sb = StripBoard(page_width=20, page_height=16, black_and_white=black_and_white)
+    sb._cap_on = True
+    sb.begin_view(view, 10, "H", at=(0, 0))
+    sb.text(1, "A", "HI")
+    sb.keepout(3, "C", 2, 2, show=show)
+    sb.end_board()
+    return sb
+
+
+def test_a_shaded_keepout_is_left_off_the_label_altogether(tmp_path):
+    plain, shown = shaded(False), shaded(True)
+    assert shown._cap_ink == plain._cap_ink
+    assert shown._cap_paths == plain._cap_paths
+    plain.gen(tmp_path / "plain.pdf")
+    shown.gen(tmp_path / "shown.pdf")
+    assert (tmp_path / "shown.pdf").read_bytes() == (tmp_path / "plain.pdf").read_bytes()
+
+
+def test_a_colour_view_shades_it_without_capturing_it(tmp_path):
+    """The capture feeds the laser and the printer, and the shading is for the eye."""
+    plain = shaded(False, view="DESIGN", black_and_white=False)
+    shown = shaded(True, view="DESIGN", black_and_white=False)
+    assert shown._cap_ink == plain._cap_ink
+    assert shown._cap_paths == plain._cap_paths
+    shown.gen(tmp_path / "design.pdf")
+    assert b"1.000 0.549 0.000 rg" in (tmp_path / "design.pdf").read_bytes()
+
+
+def test_show_keepouts_changes_nothing_that_is_fabricated(tmp_path):
+    """A resistor body shaded over its own knocked-out value, which the print filled in."""
+    def draw_with(show):
+        def draw(sb):
+            r1 = sb.resist(4, "C", "10K", l=4)
+            sb.net("A", r1.pin(1), r1.pin(2))
+            sb.autoroute(seed=0, show_keepouts=show)
+        return draw
+
+    for show in (False, True):
+        project(draw_with(show), name=str(tmp_path / str(show) / "ko"), width=8, height=8,
+                designing=False, label=True, gcode=dict(svg=True), scad=True, report=False)
+
+    def made(show, artifact):
+        return (tmp_path / str(show) / artifact).read_bytes()
+
+    assert made(True, "ko.pdf") != made(False, "ko.pdf"), "the build sheet shades them"
+    for artifact in ("ko-label.pdf", "ko.nc", "ko.svg", "ko.scad"):
+        assert made(True, artifact) == made(False, artifact), artifact
