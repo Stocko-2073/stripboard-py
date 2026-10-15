@@ -5,6 +5,21 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [0.6.0] - 2026-10-15
 
+### Changed
+- `gen_scad()` lays the label face down, and makes it 0.4 mm thick where it was 1.0. The
+  face prints on the bed, so the artwork is the first layer laid, the plate builds its
+  backing over it, and the face comes off with the finish of the bed rather than of a top
+  layer. Both bodies are still modelled the way up the label sits on the board; the
+  emitted file places them with a `face_down()` module that turns the label over about
+  its vertical centre line. That is a rotation rather than a mirror, and the
+  difference is the whole point -- a face put on the bed by mirroring prints every glyph
+  backwards, where a turned one reads the right way round once it is lifted off. The
+  defaults move from `plate_mm=1.0, inlay_mm=0.4` to `plate_mm=0.4, inlay_mm=0.2`: one
+  0.2 mm layer of artwork against the bed and one of backing behind it. A lead has to
+  clear the label and the protoboard under it, and two layers is as thin as a label gets
+  with a backing behind its artwork. Every emitted `.scad` file changes accordingly, and
+  no other output does.
+
 ### Fixed
 - Keep-out shading stays off the label. `autoroute(show_keepouts=True)` and
   `keepout(show=True)` shade a design aid, and it was drawn in every view `draw()` runs

@@ -12,8 +12,11 @@ knocked-out lettering the printed label has, and it is why each black shape is e
 the white shapes painted after it.
 
 The two bodies share one surface. The artwork is inlaid into the plate rather than standing
-on it -- the plate carries a pocket the traces drop into, both flush at the top -- because
-that is what a multi-material printer wants: one solid per filament, meeting on a plane.
+on it -- the plate carries a pocket the traces drop into, both flush at the label's face --
+because that is what a multi-material printer wants: one solid per filament, meeting on a
+plane. The label is laid face down, so that plane is the print bed: the artwork is the
+first layer laid, and the face comes off with the finish of the bed rather than of a top
+layer.
 """
 
 from __future__ import annotations
@@ -35,7 +38,9 @@ __all__ = ["ScadMixin"]
 # The static half of the emitted file. A stroke becomes a run of round-capped segments,
 # which is what matches the renderer's own round caps and joins; a fill is its polygon.
 # Shapes are indexed so the ink structure below can reference them without repeating
-# coordinates, and `for` is an implicit union so one linear_extrude covers the lot.
+# coordinates, and `for` is an implicit union so one linear_extrude covers the lot. Both
+# bodies are modelled the way up the label sits on the board, face on top, and turned
+# over onto the bed only where they are placed.
 _MODULES = """\
 module shape(i) {
     s = shapes[i];
@@ -81,21 +86,34 @@ module label_traces() {
     inlay(0);
 }
 
-if (part == "all" || part == "plate")  label_plate();
-if (part == "all" || part == "traces") label_traces();
+// Face down on the bed, so the artwork is the first layer laid: the label turned over
+// about its vertical centre line. Turned, not mirrored, so the lettering reads the right
+// way round once the print is lifted off and turned face up.
+module face_down() {
+    translate([plate[0], 0, plate_h]) rotate([0, 180, 0]) children();
+}
+
+if (part == "all" || part == "plate")  face_down() label_plate();
+if (part == "all" || part == "traces") face_down() label_traces();
 """
 
 
 class ScadMixin(_Base):
     def gen_scad(self, name, *, pitch_mm=2.54, nozzle_mm=0.4, min_stroke_mm=0.0,
-                 min_fill_mm=0.3, hole_mm=1.2, plate_mm=1.0, inlay_mm=0.4, facets=10):
+                 min_fill_mm=0.3, hole_mm=1.2, plate_mm=0.4, inlay_mm=0.2, facets=10):
         """Write the captured LABEL artwork as an OpenSCAD board label to `name`.
 
-        Two bodies for a two-filament print, meeting flush at the top face:
+        Two bodies for a two-filament print, meeting flush at the label's face:
         ``label_plate()`` is a plate the size of the board with the artwork cut out of it
         as a pocket `inlay_mm` deep, and ``label_traces()`` is the artwork that drops into
         that pocket. A `part` parameter in the emitted file selects one at a time, so each
         can be rendered to its own STL.
+
+        Both are laid face down, ready to slice. The face prints on the bed, so the
+        artwork is the first layer laid, the plate builds its backing over it, and the
+        face comes off as flat as the bed. Getting it there is a turn about the label's
+        vertical centre line rather than a mirror, which is what keeps the lettering
+        reading the right way round once the print is lifted off and turned face up.
 
         The artwork is what the label view *paints*, so filled component bodies and
         knocked-out lettering come through as they appear on the page, not merely as
@@ -105,11 +123,13 @@ class ScadMixin(_Base):
         is how the hole stipple stays out of the model; both count in millimetres, and the
         counts dropped are on the summary line and in the file's own header.
 
-        `plate_mm` is the board's thickness and `inlay_mm` how deep the artwork sits below
-        its top face; both reach the emitted file as named parameters, so they can be tried
-        at other values without exporting again. A lead has to clear this label *and* the
-        protoboard beneath it, so thinner is better, and `inlay_mm` equal to `plate_mm`
-        carries the artwork the whole way through -- the thinnest a two-colour label can be.
+        `plate_mm` is the label's thickness and `inlay_mm` how deep the artwork sits in from
+        its face; both reach the emitted file as named parameters, so they can be tried at
+        other values without exporting again. A lead has to clear this label *and* the
+        protoboard beneath it, so thinner is better: the defaults are two 0.2 mm layers,
+        one of artwork against the bed and one of backing over it. `inlay_mm` equal to
+        `plate_mm` carries the artwork the whole way through -- the thinnest a two-colour
+        label can be.
 
         Every part pin and wire end is drilled through both bodies at `hole_mm` so the
         leads still pass. Those come from the marks the footprints draw -- ``dot()`` for a
@@ -217,9 +237,10 @@ class ScadMixin(_Base):
             f"// {len(groups)} painted shapes ({carved} with lettering knocked out of "
             f"them), {len(holes)} lead holes, {plate_w:.1f} x {plate_h:.1f} mm."
             + (f" Dropped as unprintable: {', '.join(dropped)}." if dropped else ""),
-            f"// {plate_mm:.2f} mm thick with the artwork {inlay_mm:.2f} mm deep in it. Two"
-            " bodies meeting flush at the top",
-            "//   face, one per filament. Render one at a time:",
+            f"// {plate_mm:.2f} mm thick with the artwork {inlay_mm:.2f} mm deep in its face."
+            " Laid face down, so the",
+            "//   two bodies, one per filament, meet flush on the print bed. Render one at a"
+            " time:",
             f'//   openscad -D \'part="plate"\' -o plate.stl {Path(name).name}',
             "",
             'part    = "all";     // "all", "plate" or "traces"',
@@ -229,9 +250,9 @@ class ScadMixin(_Base):
             "                     //   this plus the protoboard under it, so thinner is",
             "                     //   better; a couple of layers is the practical floor",
             f"inlay_h = {inlay_mm:.3f};     // trace height (mm): how deep the artwork sits",
-            "                     //   below the top face. Set it equal to plate_h to",
-            "                     //   carry the artwork the whole way through, which is",
-            "                     //   the thinnest a two-colour label can be",
+            "                     //   in from the face, the side laid on the bed. Set it",
+            "                     //   equal to plate_h to carry the artwork the whole",
+            "                     //   way through, the thinnest a two-colour label can be",
             f"facets  = {facets};        // facets per round cap and per hole",
             "",
             f"plate = [{plate_w:.3f}, {plate_h:.3f}];",
