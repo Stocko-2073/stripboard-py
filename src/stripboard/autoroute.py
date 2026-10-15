@@ -76,7 +76,10 @@ class AutorouteMixin(_Base):
 
         Idempotent across views: the solve is cached by signature, so calling this inside a
         draw lambda that runs once per view solves only the first time. Returns the
-        router ``Result`` (status, cost, validation, per-net status)."""
+        router ``Result`` (status, cost, validation, per-net status).
+
+        ``show_keepouts`` shades every part's keep-outs where the solver placed it, as a
+        design aid: it is left off the label and everything made from it."""
         R = self._ensure_router()
         board, instances, netlist = self._build_problem()
         wobj = R.Weights(**weights) if isinstance(weights, dict) else weights
@@ -127,13 +130,25 @@ class AutorouteMixin(_Base):
                 self.cut(x, y)
 
     def _shade_rect(self, x, y, w, h, color=(255, 140, 0)):
-        """Draw a translucent, outlined rectangle (the keep-out region style)."""
+        """Draw a translucent, outlined rectangle (the keep-out region style).
+
+        A keep-out is a design aid, never artwork. A black-and-white board is the label --
+        printed, etched or 3D-printed -- so it is left off one altogether. On any other
+        board it is held out of the capture the laser and printer outputs are made from,
+        since only the PDF honours the translucency: the capture would take the fill for
+        solid ink and the outline for one more path to etch.
+        """
+        if self.black_and_white:
+            return
+        capturing = self._cap_on
+        self._cap_on = False
         self.color(*color)
         self.pdf.set_alpha(0.22)
         self._rect(x, y, w, h, "F")
         self.pdf.set_alpha(1.0)
         self._rect(x, y, w, h, "S")
         self.black()
+        self._cap_on = capturing
 
     def _render_keepouts(self, instances, color=(255, 140, 0)):
         """Shade each instance's keep-out rectangles (e.g. a button body)."""

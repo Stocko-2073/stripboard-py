@@ -65,7 +65,7 @@ Edit `draw(sb)`, re-run, look at the PDF. When the layout is right, flip
 | `label=True` | `<name>-label.pdf` | Black-and-white silkscreen, for toner transfer or a laser. |
 | `cuts=True` | `<name>_cuts.txt` | Cut locations on one comma-separated line, e.g. `A15,D9,X22,T15`. Available in both design and build modes. |
 | `gcode=True` | `<name>.nc` | GRBL laser g-code that etches that silkscreen onto the board top. |
-| `scad=True` | `<name>.scad` | An OpenSCAD label for a two-colour 3D print: a plate the size of the board with the silkscreen inlaid flush into its top face, and the lead holes drilled through both. One body per filament. Generating it needs nothing installed. |
+| `scad=True` | `<name>.scad` | An OpenSCAD label for a two-colour 3D print: a 0.4 mm plate the size of the board with the silkscreen inlaid flush into its face, and the lead holes drilled through both. One body per filament, laid face down so the silkscreen is the first layer on the bed. Generating it needs nothing installed. |
 | `carrier=True` | `<name>.stl` | A 3D-printable carrier that the finished board slots into. Needs OpenSCAD. |
 
 Cut lists use original board coordinates with alphabetic rows (`A`–`Z`, then `AA`,

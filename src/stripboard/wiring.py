@@ -249,7 +249,8 @@ class WiringMixin(_Base):
         a routing constraint: the autorouter forbids pins and jumper arcs on those cells,
         so use it to reserve space under a mounting hole, a tall part, or any mechanical
         obstruction. The region is always locked (fixed where you place it) and draws
-        nothing; pass ``show=True`` to shade it in the current view while designing."""
+        nothing; pass ``show=True`` to shade it in the current view while designing. The
+        shading is a design aid, so it is left off the label and everything made from it."""
         ry = self.row(y)
         if show:
             self._shade_rect(x - 0.5, ry - 0.5, w, h)

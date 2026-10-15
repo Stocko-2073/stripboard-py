@@ -2,7 +2,8 @@
 
 Unlike the laser exporters, this one has to survive being a physical object. A plate the
 wrong size will not sit on the board; a missing hole is a lead with nowhere to go; artwork
-that does not meet the plate flush will not print as two filaments.
+that does not meet the plate flush will not print as two filaments; and a label mirrored
+onto the bed, rather than turned over onto it, comes off reading backwards.
 
 Its input is the *ink* capture rather than the stroke capture, because a printer needs the
 artwork as area: filled component bodies, and lettering knocked out of them. That makes
@@ -12,19 +13,23 @@ the last shape covering it was black. Most of what follows pins that down.
 
 It is all checkable because OpenSCAD's vector syntax is Python's: the emitted literals
 parse back with `ast.literal_eval`, so the file is its own oracle and no golden copy is
-needed.
+needed. What the text cannot show is where the bodies land once OpenSCAD has applied the
+transforms, so where the binary is installed the label is rendered and measured as well.
 """
 
 from __future__ import annotations
 
 import ast
 import re
+import shutil
+import subprocess
 
 import pytest
 
 from stripboard import StripBoard
 
 PITCH_MM = 2.54
+HAS_OPENSCAD = shutil.which("openscad") is not None
 
 
 def captured(*, width=6, height="D", text="HI", **board_kwargs):
@@ -390,17 +395,35 @@ def test_holes_are_drilled_through_both_bodies(label_board, tmp_path):
 
 def test_both_bodies_are_defined_and_instantiated(label_board, tmp_path):
     text = scad(label_board, tmp_path)
-    for module in ("ink", "shape", "lead_holes", "inlay", "label_plate", "label_traces"):
+    for module in ("ink", "shape", "lead_holes", "inlay", "label_plate", "label_traces",
+                   "face_down"):
         assert f"module {module}(" in text
     assert 'part == "all" || part == "plate"' in text
     assert 'part == "all" || part == "traces"' in text
 
 
-def test_the_artwork_is_inlaid_flush_with_the_top_face(label_board, tmp_path):
-    """Both solids end at plate_h, so a multi-material slicer sees them meet on a plane."""
+def test_the_artwork_is_inlaid_flush_with_the_face(label_board, tmp_path):
+    """Both solids end at the face, so a multi-material slicer sees them meet on a plane."""
     text = scad(label_board, tmp_path)
     assert "translate([0, 0, plate_h - inlay_h])" in text
     assert "linear_extrude(height = inlay_h + extra)" in text
+
+
+def test_both_bodies_are_laid_face_down_by_turning_the_label_over(label_board, tmp_path):
+    """The face goes on the bed. Mirroring it there would print the lettering backwards,
+    so the label is turned over about its vertical centre line instead."""
+    text = scad(label_board, tmp_path)
+    assert "translate([plate[0], 0, plate_h]) rotate([0, 180, 0]) children();" in text
+    assert 'part == "plate")  face_down() label_plate();' in text
+    assert 'part == "traces") face_down() label_traces();' in text
+    assert "mirror(" not in text
+
+
+def test_the_default_label_is_one_layer_of_artwork_and_one_of_backing(label_board, tmp_path):
+    """Thin, because a lead has to clear the label and the protoboard under it."""
+    text = scad(label_board, tmp_path)
+    assert param(text, "plate_h") == 0.4
+    assert param(text, "inlay_h") == 0.2
 
 
 def test_the_plate_has_the_artwork_subtracted(label_board, tmp_path):
@@ -436,3 +459,41 @@ def test_the_exporter_creates_missing_parent_directories(label_board, tmp_path):
     target = tmp_path / "deep" / "deeper" / "out.scad"
     label_board.gen_scad(target)
     assert target.exists()
+
+
+# ---- the real geometry, through OpenSCAD --------------------------------------------
+
+def bounds(scad_file, part, tmp_path):
+    """One body's bounding box as OpenSCAD renders it: (x0, y0, z0), (x1, y1, z1)."""
+    stl = tmp_path / f"{part}.stl"
+    subprocess.run(["openscad", "-D", f'part="{part}"', "--export-format", "asciistl",
+                    "-o", str(stl), str(scad_file)], check=True, capture_output=True)
+    vertices = [tuple(float(v) for v in line.split()[1:])
+                for line in stl.read_text(encoding="utf-8").splitlines()
+                if line.lstrip().startswith("vertex")]
+    return tuple(map(min, zip(*vertices, strict=True))), \
+        tuple(map(max, zip(*vertices, strict=True)))
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(not HAS_OPENSCAD, reason="needs the openscad binary")
+def test_openscad_puts_the_artwork_on_the_bed_with_the_label_turned_over(tmp_path):
+    """Seen from above, the face on the bed is read from behind: a mark at the left of the
+    label as it is read prints at the right, on the same rows, in the first layer."""
+    sb = StripBoard(page_width=20, page_height=16, black_and_white=True)
+    sb._cap_on = True
+    sb.begin_view("LABEL", 10, "H", at=(0, 0))
+    sb.box(1, "B", 2, 2, "F")       # columns 1-3, rows B-D: the only ink on the label
+    sb.end_board()
+    target = tmp_path / "label.scad"
+    sb.gen_scad(target)
+    w, h = literal(target.read_text(encoding="utf-8"), "plate")
+
+    lo, hi = bounds(target, "traces", tmp_path)
+    assert (lo[2], hi[2]) == pytest.approx((0.0, 0.2), abs=1e-4)
+    assert (lo[0], hi[0]) == pytest.approx((w - 3 * PITCH_MM, w - 1 * PITCH_MM), abs=1e-4)
+    assert (lo[1], hi[1]) == pytest.approx((h - 4 * PITCH_MM, h - 2 * PITCH_MM), abs=1e-4)
+
+    lo, hi = bounds(target, "plate", tmp_path)
+    assert lo == pytest.approx((0.0, 0.0, 0.0), abs=1e-4)
+    assert hi == pytest.approx((w, h, 0.4), abs=1e-4)
